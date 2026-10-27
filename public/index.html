@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Transcritor AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20width=%22100%22%20height=%22100%22><text y=%22.9em%22 font-size=%2290%22>🎙️</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation / Header -->
+        <header class="header">
+            <div class="brand">
+                <div class="brand-logo">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" x2="12" y1="19" y2="22"></line>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>WhatsApp Transcritor</h1>
+                    <span class="badge badge-ai">Whisper Large v3 (Groq)</span>
+                </div>
+            </div>
+
+            <div class="header-status">
+                <div id="connectionPill" class="status-pill status-stopped">
+                    <span class="status-dot"></span>
+                    <span id="connectionPillText">Desligado</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Grid -->
+        <main class="dashboard-grid">
+            <!-- Left Column: Controls, QR Code & Setup -->
+            <div class="dashboard-col left-col">
+                <!-- Main Control Card -->
+                <section class="card control-card">
+                    <div class="card-header">
+                        <h2>Controle do Agente</h2>
+                        <span id="transcriptionStateBadge" class="badge badge-success">Transcrição Ativa</span>
+                    </div>
+
+                    <div class="control-actions">
+                        <button id="btnToggleBot" class="btn btn-primary btn-large">
+                            <span class="btn-icon">▶️</span>
+                            <span class="btn-label">Ligar Transcritor</span>
+                        </button>
+                        
+                        <div class="sub-actions">
+                            <button id="btnTogglePause" class="btn btn-secondary">
+                                <span class="btn-icon">⏸️</span>
+                                <span class="btn-label">Pausar Transcrições</span>
+                            </button>
+                            <button id="btnLogout" class="btn btn-ghost text-danger" title="Desconectar e limpar credenciais do WhatsApp">
+                                <span class="btn-icon">🚪</span>
+                                <span class="btn-label">Desconectar Sessão</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Metrics bar -->
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <span class="metric-title">Áudios Transcritos</span>
+                            <span id="statTotalTranscribed" class="metric-value">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Falhas / Erros</span>
+                            <span id="statTotalErrors" class="metric-value">0</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Status da API</span>
+                            <span id="statApiStatus" class="metric-value text-success">Groq OK</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Dynamic Connection Status Card (QR Code or Connected Info) -->
+                <section id="connectionCard" class="card connection-card">
+                    <!-- State: Waiting QR Code -->
+                    <div id="qrCodeView" class="qr-container hidden">
+                        <div class="qr-header">
+                            <div class="qr-title">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect width="5" height="5" x="3" y="3" rx="1"></rect>
+                                    <rect width="5" height="5" x="16" y="3" rx="1"></rect>
+                                    <rect width="5" height="5" x="3" y="16" rx="1"></rect>
+                                    <path d="M21 16h-3a2 2 0 0 0-2 2v3"></path>
+                                    <path d="M21 21v.01"></path>
+                                    <path d="M12 7v3a2 2 0 0 1-2 2H7"></path>
+                                    <path d="M3 12h.01"></path>
+                                    <path d="M12 3h.01"></path>
+                                    <path d="M12 16v.01"></path>
+                                    <path d="M16 12h1"></path>
+                                    <path d="M21 12v.01"></path>
+                                    <path d="M12 21v-1"></path>
+                                </svg>
+                                <h3>Escaneie o QR Code</h3>
+                            </div>
+                            <span class="qr-pulse-badge">Aguardando Leitura</span>
+                        </div>
+
+                        <div class="qr-display-box">
+                            <img id="qrImage" src="" alt="WhatsApp QR Code" class="qr-image">
+                            <div id="qrLoading" class="qr-spinner hidden">
+                                <div class="spinner"></div>
+                                <span>Gerando novo código...</span>
+                            </div>
+                        </div>
+
+                        <ol class="qr-instructions">
+                            <li>Abra o <strong>WhatsApp</strong> no seu smartphone.</li>
+                            <li>Toque em <strong>Aparelhos conectados</strong> (no menu ou configurações).</li>
+                            <li>Toque em <strong>Conectar um aparelho</strong>.</li>
+                            <li>Aponte a câmera para este QR Code.</li>
+                        </ol>
+                    </div>
+
+                    <!-- State: Connected User Info -->
+                    <div id="connectedView" class="connected-container hidden">
+                        <div class="connected-user-card">
+                            <div class="user-avatar">
+                                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
+                            </div>
+                            <div class="user-details">
+                                <span class="user-status-text">Conectado ao WhatsApp</span>
+                                <h3 id="connectedUserName">Giovani Pelissoni</h3>
+                                <p id="connectedUserPhone">+55 11 97852-5006</p>
+                            </div>
+                            <div class="user-badge-online">Online</div>
+                        </div>
+                        <p class="connected-hint">
+                            🎧 O agente está ativo e ouvindo mensagens. Qualquer áudio no privado será transcrito automaticamente!
+                        </p>
+                    </div>
+
+                    <!-- State: Stopped / Disconnected Idle View -->
+                    <div id="idleView" class="idle-container">
+                        <div class="idle-icon">
+                            <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                                <line x1="12" y1="2" x2="12" y2="12"></line>
+                            </svg>
+                        </div>
+                        <h3>Transcritor Desligado</h3>
+                        <p>Clique no botão <strong>"Ligar Transcritor"</strong> acima para conectar seu WhatsApp ou carregar a sessão existente.</p>
+                    </div>
+                </section>
+
+                <!-- Configuration Card -->
+                <section class="card config-card">
+                    <div class="card-header">
+                        <h2>Preferências</h2>
+                    </div>
+
+                    <div class="config-options">
+                        <label class="switch-row">
+                            <div class="switch-info">
+                                <span class="switch-title">Transcrever áudios privados recebidos</span>
+                                <span class="switch-desc">Transcreve mensagens de voz enviadas por contatos no privado.</span>
+                            </div>
+                            <input type="checkbox" id="cfgPrivateAudio" checked>
+                            <span class="switch-slider"></span>
+                        </label>
+
+                        <label class="switch-row">
+                            <div class="switch-info">
+                                <span class="switch-title">Transcrever meus próprios áudios</span>
+                                <span class="switch-desc">Transcreve áudios que você mesmo gravar e enviar no privado.</span>
+                            </div>
+                            <input type="checkbox" id="cfgMyOwnAudio" checked>
+                            <span class="switch-slider"></span>
+                        </label>
+
+                        <div class="select-row">
+                            <div class="select-info">
+                                <span class="select-title">Comportamento em Grupos</span>
+                                <span class="select-desc">Defina como o transcritor atua dentro de conversas em grupo.</span>
+                            </div>
+                            <select id="cfgGroupMode" class="form-select">
+                                <option value="command" selected>Apenas com /transcrever (Recomendado)</option>
+                                <option value="always">Transcrever todos os áudios do grupo</option>
+                                <option value="disabled">Desativado em grupos</option>
+                            </select>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Column: Live Transcription Feed & Console Logs -->
+            <div class="dashboard-col right-col">
+                <!-- Transcriptions Live Feed Card -->
+                <section class="card feed-card">
+                    <div class="card-header">
+                        <div class="feed-header-title">
+                            <h2>Transcrições em Tempo Real</h2>
+                            <span id="feedCountBadge" class="count-badge">0 áudios</span>
+                        </div>
+                        <button id="btnClearFeed" class="btn btn-sm btn-ghost">Limpar</button>
+                    </div>
+
+                    <div id="transcriptionsList" class="transcriptions-list">
+                        <!-- Empty state by default -->
+                        <div id="emptyFeedState" class="empty-state">
+                            <div class="empty-icon">🎙️</div>
+                            <h3>Nenhum áudio processado nesta sessão</h3>
+                            <p>Envie ou receba um áudio no WhatsApp. A transcrição aparecerá aqui instantaneamente!</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- System Logs (Collapsible) -->
+                <section class="card logs-card">
+                    <div class="card-header pointer" id="logsHeaderToggle">
+                        <div class="logs-header-left">
+                            <span class="logs-chevron">▼</span>
+                            <h2>Console de Logs</h2>
+                        </div>
+                        <span class="badge badge-neutral">Ao vivo</span>
+                    </div>
+
+                    <div id="logsBody" class="logs-body">
+                        <div id="logsContainer" class="logs-container">
+                            <div class="log-line log-info">
+                                <span class="log-time">[00:00:00]</span>
+                                <span class="log-msg">Sistema de transcrição pronto.</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

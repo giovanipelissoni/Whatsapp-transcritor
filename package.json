@@ -1,0 +1,21 @@
+{
+  "name": "whatsapp-transcritor",
+  "version": "2.0.0",
+  "description": "Transcritor automático de áudios do WhatsApp usando Baileys, Groq Whisper e Dashboard Web",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "cli": "node index.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.7.13",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "groq-sdk": "^0.15.0",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
