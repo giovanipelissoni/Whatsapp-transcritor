@@ -36,6 +36,10 @@ bot.on('transcription_update', (item) => {
     broadcastSSE('transcription', item);
 });
 
+bot.on('market_updated', (items) => {
+    broadcastSSE('market_update', items);
+});
+
 bot.on('log', (log) => {
     recentLogs.push(log);
     if (recentLogs.length > 100) recentLogs.shift();
@@ -54,6 +58,7 @@ app.get('/api/events', (req, res) => {
     res.write(`event: status\ndata: ${JSON.stringify(bot.getStatus())}\n\n`);
     res.write(`event: logs_init\ndata: ${JSON.stringify(recentLogs.slice(-25))}\n\n`);
     res.write(`event: transcriptions_init\ndata: ${JSON.stringify(bot.recentTranscriptions)}\n\n`);
+    res.write(`event: market_init\ndata: ${JSON.stringify(bot.market.getItems())}\n\n`);
 
     sseClients.add(res);
 
@@ -133,6 +138,58 @@ app.get('/api/transcriptions', (req, res) => {
 
 app.get('/api/logs', (req, res) => {
     res.json({ logs: recentLogs });
+});
+
+// ==========================================
+// Rotas da Lista de Mercado
+// ==========================================
+app.get('/api/market', (req, res) => {
+    res.json({
+        items: bot.market.getItems(),
+        lastSuggestions: bot.market.lastSuggestions
+    });
+});
+
+app.post('/api/market/add', (req, res) => {
+    const { name } = req.body;
+    const added = bot.market.addItem(name);
+    bot.emit('market_updated', bot.market.getItems());
+    res.json({ success: true, added, items: bot.market.getItems() });
+});
+
+app.post('/api/market/toggle', (req, res) => {
+    const { id } = req.body;
+    const item = bot.market.toggleItem(id);
+    bot.emit('market_updated', bot.market.getItems());
+    res.json({ success: true, item, items: bot.market.getItems() });
+});
+
+app.post('/api/market/remove', (req, res) => {
+    const { id } = req.body;
+    const removed = bot.market.removeItem(id);
+    bot.emit('market_updated', bot.market.getItems());
+    res.json({ success: true, removed, items: bot.market.getItems() });
+});
+
+app.post('/api/market/clear', (req, res) => {
+    const count = bot.market.clearList();
+    bot.emit('market_updated', bot.market.getItems());
+    res.json({ success: true, count, items: bot.market.getItems() });
+});
+
+app.get('/api/market/suggest', async (req, res) => {
+    try {
+        const suggestions = await bot.market.generateSuggestions(bot.groq);
+        res.json({ success: true, suggestions });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/market/apply-suggestions', (req, res) => {
+    const added = bot.market.applyLastSuggestions();
+    bot.emit('market_updated', bot.market.getItems());
+    res.json({ success: true, added, items: bot.market.getItems() });
 });
 
 // Rota 404 para endpoints de API (impede que requisições de API recebam HTML por engano)

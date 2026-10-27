@@ -36,8 +36,21 @@
             </div>
         </header>
 
-        <!-- Main Dashboard Grid -->
-        <main class="dashboard-grid">
+        <!-- Main Navigation Bar -->
+        <nav class="main-nav">
+            <button id="navTabTranscriber" class="nav-tab-btn active">
+                <span class="nav-icon">🎙️</span>
+                <span>Transcritor & Conexão</span>
+            </button>
+            <button id="navTabMarket" class="nav-tab-btn">
+                <span class="nav-icon">🛒</span>
+                <span>Lista de Mercado</span>
+                <span id="marketBadgeCount" class="nav-badge">0</span>
+            </button>
+        </nav>
+
+        <!-- View 1: Main Transcriber Dashboard Grid -->
+        <main id="viewTranscriber" class="dashboard-grid">
             <!-- Left Column: Controls, QR Code & Setup -->
             <div class="dashboard-col left-col">
                 <!-- Main Control Card -->
@@ -270,6 +283,68 @@
                         </div>
                     </div>
                 </section>
+            </div>
+        </main>
+
+        <!-- View 2: Lista de Mercado -->
+        <main id="viewMarket" class="market-view hidden">
+            <div class="card market-card">
+                <div class="card-header">
+                    <div class="market-header-title">
+                        <h2>🛒 Lista de Compras de Supermercado</h2>
+                        <span id="marketStatusStats" class="badge badge-success">0 produtos</span>
+                    </div>
+                    <div class="market-header-actions">
+                        <button id="btnAiSuggest" class="btn btn-secondary btn-sm">
+                            <span>✨</span>
+                            <span>Sugestões da IA</span>
+                        </button>
+                        <button id="btnClearMarket" class="btn btn-ghost btn-sm text-danger">
+                            <span>🗑️</span>
+                            <span>Limpar Lista</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Add item input row -->
+                <div class="market-add-box">
+                    <div class="market-input-group">
+                        <input type="text" id="marketInputItem" class="form-input market-input" placeholder="Digite o produto (ex: Leite, Café, Ovos, Detergente...)">
+                        <button id="btnAddMarketItem" class="btn btn-primary">
+                            <span>➕</span>
+                            <span>Adicionar</span>
+                        </button>
+                    </div>
+                    <p class="market-input-hint">💡 Separe vários produtos por vírgula para adicionar todos de uma vez. Integrado em tempo real com o WhatsApp (<code>/mercado</code>)!</p>
+                </div>
+
+                <!-- AI Suggestions Card (Collapsible/Conditional) -->
+                <div id="aiSuggestionsBox" class="ai-suggestions-box hidden">
+                    <div class="ai-sugg-header">
+                        <div class="ai-sugg-title">
+                            <span>✨</span>
+                            <strong>Sugestões Inteligentes da IA (Baseadas na sua lista):</strong>
+                        </div>
+                        <button id="btnApplyAllSuggestions" class="btn btn-primary btn-sm">➕ Adicionar Todas</button>
+                    </div>
+                    <div id="aiSuggestionsChips" class="ai-suggestions-chips">
+                        <!-- Chips will be inserted here -->
+                    </div>
+                </div>
+
+                <!-- Checklist of items -->
+                <div id="marketListContainer" class="market-list-container">
+                    <div id="emptyMarketState" class="empty-state">
+                        <div class="empty-icon">🛒</div>
+                        <h3>Sua lista de mercado está vazia</h3>
+                        <p>Adicione produtos pelo campo acima ou envie <strong>/mercado adicionar [produto]</strong> no WhatsApp!</p>
+                    </div>
+                </div>
+
+                <!-- Footer with instructions -->
+                <div class="market-footer-info">
+                    <span>📱 <strong>Comandos no WhatsApp:</strong> <code>/mercado</code>, <code>/mercado adicionar [item]</code>, <code>/mercado remover [item]</code>, <code>/mercado sugestão</code>, <code>/mercado adicionar sugestão</code>, <code>/mercado limpar</code></span>
+                </div>
             </div>
         </main>
     </div>

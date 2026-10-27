@@ -37,6 +37,20 @@ Ferramenta local com **Dashboard Web** interativo para transcrever áudios do Wh
 
 ---
 
+## 🛒 Lista de Mercado & Assistente de Compras
+
+Você pode gerenciar sua lista de compras tanto pelo WhatsApp quanto pelo Painel Web em tempo real!
+
+* **/comandos**: Exibe todos os comandos do assistente e suas descrições.
+* **/mercado**: Puxa e exibe a lista de compras atualizada.
+* **/mercado adicionar [produto]**: Adiciona um ou mais produtos (separe por vírgula).
+* **/mercado remover [número ou nome]**: Remove um produto específico da lista.
+* **/mercado limpar**: Limpa toda a lista de mercado.
+* **/mercado sugestão**: Sugere novos produtos usando IA com base na sua lista atual.
+* **/mercado adicionar sugestão**: Adiciona os itens sugeridos diretamente à lista de compras.
+
+---
+
 ## 📋 Pré-requisitos
 
 1. **Chave de API Gratuita da Groq:**

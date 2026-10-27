@@ -13,6 +13,7 @@ import pino from 'pino';
 import Groq, { toFile } from 'groq-sdk';
 import fs from 'fs';
 import path from 'path';
+import { MarketManager } from './marketManager.js';
 
 export class BotManager extends EventEmitter {
     constructor() {
@@ -46,6 +47,9 @@ export class BotManager extends EventEmitter {
         this.processedMessageIds = new Set();
         this.saveTimer = null;
         this.loadProcessedIds();
+
+        // Gerenciador da Lista de Mercado
+        this.market = new MarketManager();
 
         // Inicializa Groq SDK
         const apiKey = process.env.GROQ_API_KEY;
@@ -405,6 +409,150 @@ export class BotManager extends EventEmitter {
         const textMsg = (message.conversation || message.extendedTextMessage?.text || '').trim();
         const contextInfo = message.extendedTextMessage?.contextInfo;
         const quotedMessage = this.getNormalizedMessage(contextInfo?.quotedMessage);
+
+        const lowerText = textMsg.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+        // =========================================================================
+        // COMANDO: /comandos (ou /ajuda)
+        // =========================================================================
+        if (lowerText === '/comandos' || lowerText.startsWith('/comandos ') || lowerText === '/ajuda') {
+            if (this.isMessageProcessed(msgId)) return;
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (nowSec - this.getMessageTimestampSeconds(rawMsg) > 180) return;
+            this.markMessageProcessed(msgId);
+
+            const helpText = `🤖 *Comandos do Assistente:*
+
+🎙️ *Áudio & Transcrição:*
+• */transcrever*: Responda citando qualquer áudio para transcrevê-lo sob demanda.
+
+🛒 *Lista de Mercado:*
+• */mercado*: Puxa e exibe a lista de compras atual.
+• */mercado adicionar [item]*: Adiciona produtos (separe por vírgula para vários).
+• */mercado remover [número ou nome]*: Remove um produto da lista.
+• */mercado limpar*: Limpa toda a lista de compras.
+• */mercado sugestão*: Sugere novos produtos usando IA com base na sua lista.
+• */mercado adicionar sugestão*: Adiciona as sugestões geradas à sua lista de compras.
+
+🌐 *Painel Web:* http://localhost:3000`;
+
+            await this.sock.sendMessage(remoteJid, { text: helpText }, { quoted: rawMsg });
+            return;
+        }
+
+        // =========================================================================
+        // COMANDOS: /mercado
+        // =========================================================================
+        if (lowerText === '/mercado' || lowerText.startsWith('/mercado ')) {
+            if (this.isMessageProcessed(msgId)) return;
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (nowSec - this.getMessageTimestampSeconds(rawMsg) > 180) return;
+            this.markMessageProcessed(msgId);
+
+            // Subcomando 1: /mercado adicionar sugestao
+            if (lowerText.startsWith('/mercado adicionar sugestao')) {
+                const added = this.market.applyLastSuggestions();
+                if (added.length === 0) {
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `⚠️ *Nenhuma sugestão pendente encontrada!*\n\nEnvie primeiro */mercado sugestão* para a IA gerar novas ideias.`
+                    }, { quoted: rawMsg });
+                    return;
+                }
+
+                this.emit('market_updated', this.market.getItems());
+                await this.sock.sendMessage(remoteJid, {
+                    text: `✅ *${added.length} sugestões adicionadas à sua lista:*\n\n${added.map(i => `• ${i.name}`).join('\n')}\n\nEnvie */mercado* para ver a lista atualizada.`
+                }, { quoted: rawMsg });
+                return;
+            }
+
+            // Subcomando 2: /mercado adicionar [itens...]
+            if (lowerText.startsWith('/mercado adicionar')) {
+                const itemsText = textMsg.replace(/^\/mercado\s+adicionar\s*/i, '').trim();
+                if (!itemsText) {
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `💡 *Como adicionar:* Digite o produto após o comando.\nExemplo: */mercado adicionar Arroz, Café, Ovos*`
+                    }, { quoted: rawMsg });
+                    return;
+                }
+
+                const added = this.market.addItem(itemsText);
+                this.emit('market_updated', this.market.getItems());
+                await this.sock.sendMessage(remoteJid, {
+                    text: `✅ *Produto${added.length > 1 ? 's' : ''} adicionado${added.length > 1 ? 's' : ''} à lista:*\n${added.map(i => `• ${i.name}`).join('\n')}\n\nEnvie */mercado* para visualizar a lista completa.`
+                }, { quoted: rawMsg });
+                return;
+            }
+
+            // Subcomando 3: /mercado remover [item/número]
+            if (lowerText.startsWith('/mercado remover')) {
+                const target = textMsg.replace(/^\/mercado\s+remover\s*/i, '').trim();
+                if (!target) {
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `💡 *Como remover:* Informe o número ou nome do item.\nExemplo: */mercado remover 2* ou */mercado remover Leite*`
+                    }, { quoted: rawMsg });
+                    return;
+                }
+
+                const removed = this.market.removeItem(target);
+                if (removed) {
+                    this.emit('market_updated', this.market.getItems());
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `🗑️ Item removido da lista: *${removed.name}*`
+                    }, { quoted: rawMsg });
+                } else {
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `❌ Item "*${target}*" não encontrado na lista.\nEnvie */mercado* para ver os números dos itens.`
+                    }, { quoted: rawMsg });
+                }
+                return;
+            }
+
+            // Subcomando 4: /mercado limpar
+            if (lowerText === '/mercado limpar') {
+                const count = this.market.clearList();
+                this.emit('market_updated', this.market.getItems());
+                await this.sock.sendMessage(remoteJid, {
+                    text: `🗑️ *Lista de mercado esvaziada com sucesso!* (${count} item${count === 1 ? '' : 's'} removido${count === 1 ? '' : 's'})`
+                }, { quoted: rawMsg });
+                return;
+            }
+
+            // Subcomando 5: /mercado sugestao
+            if (lowerText === '/mercado sugestao') {
+                try {
+                    await this.sock.sendMessage(remoteJid, { react: { text: '✨', key: rawMsg.key } });
+                } catch {}
+
+                try {
+                    const suggestions = await this.market.generateSuggestions(this.groq);
+                    if (suggestions.length === 0) {
+                        await this.sock.sendMessage(remoteJid, {
+                            text: `Não consegui gerar sugestões no momento. Tente novamente mais tarde.`
+                        }, { quoted: rawMsg });
+                        return;
+                    }
+
+                    const formattedList = suggestions.map((s, idx) => `*${idx + 1}.* ${s}`).join('\n');
+                    const reply = `✨ *Sugestões Inteligentes de Mercado (IA):*\n\n${formattedList}\n\n👉 Para incluir essas sugestões na sua lista de compras, envie:\n*/mercado adicionar sugestão*`;
+
+                    await this.sock.sendMessage(remoteJid, { text: reply }, { quoted: rawMsg });
+                    try {
+                        await this.sock.sendMessage(remoteJid, { react: { text: '✅', key: rawMsg.key } });
+                    } catch {}
+                } catch (err) {
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `❌ Erro ao gerar sugestões com IA: ${err.message}`
+                    }, { quoted: rawMsg });
+                }
+                return;
+            }
+
+            // Subcomando padrão: /mercado
+            const listMsg = this.market.formatWhatsAppList();
+            await this.sock.sendMessage(remoteJid, { text: listMsg }, { quoted: rawMsg });
+            return;
+        }
 
         // Se transcrições estiverem pausadas globalmente, ignora processamento de áudio
         if (!this.isTranscribingEnabled) {

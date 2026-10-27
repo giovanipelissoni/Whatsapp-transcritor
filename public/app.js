@@ -50,6 +50,25 @@ const pairingCodeDisplayBox = document.getElementById('pairingCodeDisplayBox');
 const pairingCodeValue = document.getElementById('pairingCodeValue');
 const btnCopyPairingCode = document.getElementById('btnCopyPairingCode');
 
+// Navegação Principal (Abas)
+const navTabTranscriber = document.getElementById('navTabTranscriber');
+const navTabMarket = document.getElementById('navTabMarket');
+const viewTranscriber = document.getElementById('viewTranscriber');
+const viewMarket = document.getElementById('viewMarket');
+const marketBadgeCount = document.getElementById('marketBadgeCount');
+
+// Elementos da Lista de Mercado
+const marketStatusStats = document.getElementById('marketStatusStats');
+const btnAiSuggest = document.getElementById('btnAiSuggest');
+const btnClearMarket = document.getElementById('btnClearMarket');
+const marketInputItem = document.getElementById('marketInputItem');
+const btnAddMarketItem = document.getElementById('btnAddMarketItem');
+const aiSuggestionsBox = document.getElementById('aiSuggestionsBox');
+const aiSuggestionsChips = document.getElementById('aiSuggestionsChips');
+const btnApplyAllSuggestions = document.getElementById('btnApplyAllSuggestions');
+const marketListContainer = document.getElementById('marketListContainer');
+const emptyMarketState = document.getElementById('emptyMarketState');
+
 // Inicialização da conexão SSE
 function setupEventSource() {
     if (eventSource) {
@@ -73,6 +92,17 @@ function setupEventSource() {
         if (Array.isArray(items)) {
             items.reverse().forEach((item) => renderTranscriptionItem(item));
         }
+    });
+
+    eventSource.addEventListener('market_init', (e) => {
+        const items = JSON.parse(e.data);
+        renderMarketItems(items);
+    });
+
+    eventSource.addEventListener('market_update', (e) => {
+        const items = JSON.parse(e.data);
+        renderMarketItems(items);
+    });
     });
 
     eventSource.addEventListener('log', (e) => {
@@ -455,6 +485,209 @@ function escapeHtml(str) {
 function escapeQuotes(str) {
     if (!str) return '';
     return str.replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, ' ');
+}
+
+// ==========================================
+// Navegação entre Abas
+// ==========================================
+if (navTabTranscriber && navTabMarket) {
+    navTabTranscriber.addEventListener('click', () => {
+        navTabTranscriber.classList.add('active');
+        navTabMarket.classList.remove('active');
+        viewTranscriber.classList.remove('hidden');
+        viewMarket.classList.add('hidden');
+    });
+
+    navTabMarket.addEventListener('click', () => {
+        navTabMarket.classList.add('active');
+        navTabTranscriber.classList.remove('active');
+        viewMarket.classList.remove('hidden');
+        viewTranscriber.classList.add('hidden');
+    });
+}
+
+// ==========================================
+// Lista de Mercado (Frontend)
+// ==========================================
+function renderMarketItems(items) {
+    if (!Array.isArray(items)) return;
+
+    const total = items.length;
+    const pending = items.filter(i => !i.checked).length;
+    const checked = total - pending;
+
+    marketBadgeCount.textContent = pending;
+    marketStatusStats.textContent = `${total} produto${total === 1 ? '' : 's'} (${checked} comprado${checked === 1 ? '' : 's'})`;
+
+    if (total === 0) {
+        marketListContainer.innerHTML = '';
+        marketListContainer.appendChild(emptyMarketState);
+        emptyMarketState.classList.remove('hidden');
+        return;
+    }
+
+    emptyMarketState.classList.add('hidden');
+    marketListContainer.innerHTML = '';
+
+    items.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = 'market-item-row';
+        row.id = `mkt-${item.id}`;
+        row.innerHTML = `
+            <label class="market-item-left" title="Marcar como comprado">
+                <input type="checkbox" class="market-item-checkbox" ${item.checked ? 'checked' : ''} onchange="toggleMarketItem('${item.id}')">
+                <span class="market-item-name ${item.checked ? 'checked' : ''}"><strong>${index + 1}.</strong> ${escapeHtml(item.name)}</span>
+            </label>
+            <button class="market-item-del" onclick="deleteMarketItem('${item.id}')" title="Excluir produto">🗑️</button>
+        `;
+        marketListContainer.appendChild(row);
+    });
+}
+
+async function addMarketItem() {
+    const text = marketInputItem.value.trim();
+    if (!text) return;
+
+    btnAddMarketItem.disabled = true;
+    try {
+        const res = await fetch('/api/market/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: text })
+        });
+        const data = await res.json();
+        if (data.success) {
+            marketInputItem.value = '';
+            showToast('Produto(s) adicionado(s) com sucesso!', 'info');
+        } else {
+            showToast('Erro ao adicionar produto: ' + data.error, 'error');
+        }
+    } catch (e) {
+        showToast('Erro de rede: ' + e.message, 'error');
+    } finally {
+        btnAddMarketItem.disabled = false;
+        marketInputItem.focus();
+    }
+}
+
+if (btnAddMarketItem) {
+    btnAddMarketItem.addEventListener('click', addMarketItem);
+}
+
+if (marketInputItem) {
+    marketInputItem.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addMarketItem();
+        }
+    });
+}
+
+window.toggleMarketItem = async function(id) {
+    try {
+        await fetch('/api/market/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+    } catch (e) {
+        showToast('Erro ao alternar produto', 'error');
+    }
+};
+
+window.deleteMarketItem = async function(id) {
+    try {
+        await fetch('/api/market/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        showToast('Produto removido da lista!', 'info');
+    } catch (e) {
+        showToast('Erro ao remover produto', 'error');
+    }
+};
+
+if (btnClearMarket) {
+    btnClearMarket.addEventListener('click', async () => {
+        const confirmClear = confirm('Tem certeza que deseja esvaziar toda a lista de compras?');
+        if (!confirmClear) return;
+
+        try {
+            await fetch('/api/market/clear', { method: 'POST' });
+            showToast('Lista de mercado esvaziada!', 'info');
+        } catch (e) {
+            showToast('Erro ao limpar lista', 'error');
+        }
+    });
+}
+
+// Sugestões com IA
+if (btnAiSuggest) {
+    btnAiSuggest.addEventListener('click', async () => {
+        btnAiSuggest.disabled = true;
+        btnAiSuggest.innerHTML = '<span>⏳</span><span>Pensando...</span>';
+
+        try {
+            const res = await fetch('/api/market/suggest');
+            const data = await res.json();
+            if (data.success && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+                renderSuggestionsChips(data.suggestions);
+                aiSuggestionsBox.classList.remove('hidden');
+                showToast('Sugestões geradas com IA!', 'info');
+            } else {
+                showToast(data.error || 'Nenhuma sugestão encontrada.', 'error');
+            }
+        } catch (e) {
+            showToast('Erro ao solicitar sugestões: ' + e.message, 'error');
+        } finally {
+            btnAiSuggest.disabled = false;
+            btnAiSuggest.innerHTML = '<span>✨</span><span>Sugestões da IA</span>';
+        }
+    });
+}
+
+function renderSuggestionsChips(suggestions) {
+    aiSuggestionsChips.innerHTML = '';
+    suggestions.forEach(item => {
+        const chip = document.createElement('button');
+        chip.className = 'sugg-chip';
+        chip.innerHTML = `<span>➕</span><span>${escapeHtml(item)}</span>`;
+        chip.onclick = () => applySingleSuggestion(item, chip);
+        aiSuggestionsChips.appendChild(chip);
+    });
+}
+
+async function applySingleSuggestion(name, chipElement) {
+    try {
+        await fetch('/api/market/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        });
+        showToast(`Adicionado: ${name}`, 'info');
+        if (chipElement) chipElement.remove();
+        if (aiSuggestionsChips.children.length === 0) {
+            aiSuggestionsBox.classList.add('hidden');
+        }
+    } catch (e) {
+        showToast('Erro ao adicionar sugestão', 'error');
+    }
+}
+
+if (btnApplyAllSuggestions) {
+    btnApplyAllSuggestions.addEventListener('click', async () => {
+        btnApplyAllSuggestions.disabled = true;
+        try {
+            await fetch('/api/market/apply-suggestions', { method: 'POST' });
+            aiSuggestionsBox.classList.add('hidden');
+            showToast('Todas as sugestões foram adicionadas!', 'info');
+        } catch (e) {
+            showToast('Erro ao aplicar sugestões', 'error');
+        } finally {
+            btnApplyAllSuggestions.disabled = false;
+        }
+    });
 }
 
 // Inicializar ao carregar a página
