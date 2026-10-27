@@ -153,8 +153,50 @@ async function startBot() {
             const contextInfo = message.extendedTextMessage?.contextInfo;
             const quotedMessage = getNormalizedMessage(contextInfo?.quotedMessage);
 
+            const isTranscribeCommand = textMsg.toLowerCase().startsWith('/transcrever');
+
             // =========================================================================
-            // REGRA 1: PRIVADO - Transcrever automaticamente (enviados e recebidos)
+            // REGRA 1: COMANDO /transcrever (Funciona em TODAS as conversas: Privado e Grupos)
+            // =========================================================================
+            if (isTranscribeCommand && quotedMessage?.audioMessage) {
+                console.log(`🎙️ Comando /transcrever detectado em ${remoteJid} (${isGroup ? 'Grupo' : 'Privado'})`);
+
+                try {
+                    // Reage com ampulheta no comando
+                    await sock.sendMessage(remoteJid, { react: { text: '⏳', key: rawMsg.key } });
+
+                    // Monta o objeto de mensagem citada para o Baileys conseguir baixar
+                    const quotedMsgObj = {
+                        key: {
+                            remoteJid: remoteJid,
+                            id: contextInfo.stanzaId,
+                            ...(contextInfo.participant ? { participant: contextInfo.participant } : {})
+                        },
+                        message: quotedMessage
+                    };
+
+                    const buffer = await downloadMediaMessage(quotedMsgObj, 'buffer', {});
+                    const texto = await transcreverAudio(buffer);
+
+                    if (texto && texto.length > 0) {
+                        await sock.sendMessage(remoteJid, {
+                            text: `🎙️ *Transcrição do áudio:*\n\n${texto}`
+                        }, { quoted: rawMsg });
+
+                        // Reage com check verde no comando
+                        await sock.sendMessage(remoteJid, { react: { text: '✅', key: rawMsg.key } });
+                    } else {
+                        await sock.sendMessage(remoteJid, { react: { text: '❓', key: rawMsg.key } });
+                    }
+                } catch (err) {
+                    console.error('❌ Erro ao transcrever áudio via comando:', err.message);
+                    await sock.sendMessage(remoteJid, { react: { text: '❌', key: rawMsg.key } });
+                }
+                continue;
+            }
+
+            // =========================================================================
+            // REGRA 2: PRIVADO - Transcrição automática de áudios (recebidos e enviados)
             // =========================================================================
             if (!isGroup && audioMsg) {
                 console.log(`🎙️ [Privado] Áudio detectado em ${remoteJid} (Enviado por mim: ${fromMe})`);
@@ -181,45 +223,6 @@ async function startBot() {
                     await sock.sendMessage(remoteJid, { react: { text: '❌', key: rawMsg.key } });
                 }
                 continue;
-            }
-
-            // =========================================================================
-            // REGRA 2: GRUPOS - Apenas quando responder com /transcrever a um áudio
-            // =========================================================================
-            if (isGroup && textMsg.toLowerCase().startsWith('/transcrever') && quotedMessage?.audioMessage) {
-                console.log(`🎙️ [Grupo] Comando /transcrever detectado em ${remoteJid}`);
-
-                try {
-                    // Reage com ampulheta no comando
-                    await sock.sendMessage(remoteJid, { react: { text: '⏳', key: rawMsg.key } });
-
-                    // Monta o objeto de mensagem citada para o Baileys conseguir baixar
-                    const quotedMsgObj = {
-                        key: {
-                            remoteJid: remoteJid,
-                            id: contextInfo.stanzaId,
-                            participant: contextInfo.participant
-                        },
-                        message: quotedMessage
-                    };
-
-                    const buffer = await downloadMediaMessage(quotedMsgObj, 'buffer', {});
-                    const texto = await transcreverAudio(buffer);
-
-                    if (texto && texto.length > 0) {
-                        await sock.sendMessage(remoteJid, {
-                            text: `🎙️ *Transcrição do áudio:*\n\n${texto}`
-                        }, { quoted: rawMsg });
-
-                        // Reage com check verde no comando
-                        await sock.sendMessage(remoteJid, { react: { text: '✅', key: rawMsg.key } });
-                    } else {
-                        await sock.sendMessage(remoteJid, { react: { text: '❓', key: rawMsg.key } });
-                    }
-                } catch (err) {
-                    console.error('❌ Erro ao transcrever áudio do grupo:', err.message);
-                    await sock.sendMessage(remoteJid, { react: { text: '❌', key: rawMsg.key } });
-                }
             }
         }
     });

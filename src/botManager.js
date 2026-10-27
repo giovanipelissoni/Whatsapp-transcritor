@@ -264,8 +264,45 @@ export class BotManager extends EventEmitter {
             return;
         }
 
+        const isTranscribeCommand = textMsg.toLowerCase().startsWith('/transcrever');
+
         // =========================================================================
-        // REGRA 1: PRIVADO (DMs)
+        // REGRA 1: COMANDO /transcrever (TODAS as conversas: Privado e Grupos)
+        // =========================================================================
+        if (isTranscribeCommand && quotedMessage?.audioMessage) {
+            // Se for grupo e estiver totalmente desativado para grupos, ignora
+            if (isGroup && this.config.groupMode === 'disabled') {
+                return;
+            }
+
+            const quotedMsgObj = {
+                key: {
+                    remoteJid: remoteJid,
+                    id: contextInfo.stanzaId,
+                    ...(contextInfo.participant ? { participant: contextInfo.participant } : {})
+                },
+                message: quotedMessage
+            };
+
+            const sender = isGroup
+                ? (contextInfo.participant || remoteJid)
+                : remoteJid.replace('@s.whatsapp.net', '');
+
+            await this.processAudioMessage({
+                targetJid: remoteJid,
+                rawMsgToDownload: quotedMsgObj,
+                quoteMsgToReply: rawMsg,
+                reactionKey: rawMsg.key,
+                fromMe,
+                isGroup,
+                sender,
+                isReplyToCommand: true
+            });
+            return;
+        }
+
+        // =========================================================================
+        // REGRA 2: PRIVADO (DMs) - Transcrição automática de áudios recebidos/enviados
         // =========================================================================
         if (!isGroup && audioMsg && this.config.transcribePrivateAudio) {
             if (fromMe && !this.config.transcribeMyOwnAudio) {
@@ -285,50 +322,19 @@ export class BotManager extends EventEmitter {
         }
 
         // =========================================================================
-        // REGRA 2: GRUPOS
+        // REGRA 3: GRUPOS - Transcrever sempre (se configurado como 'always')
         // =========================================================================
-        if (isGroup) {
-            if (this.config.groupMode === 'disabled') {
-                return;
-            }
-
-            // Modo 1: Responder com /transcrever citando o áudio
-            if (this.config.groupMode === 'command' && textMsg.toLowerCase().startsWith('/transcrever') && quotedMessage?.audioMessage) {
-                const quotedMsgObj = {
-                    key: {
-                        remoteJid: remoteJid,
-                        id: contextInfo.stanzaId,
-                        participant: contextInfo.participant
-                    },
-                    message: quotedMessage
-                };
-
-                await this.processAudioMessage({
-                    targetJid: remoteJid,
-                    rawMsgToDownload: quotedMsgObj,
-                    quoteMsgToReply: rawMsg,
-                    reactionKey: rawMsg.key,
-                    fromMe,
-                    isGroup: true,
-                    sender: contextInfo.participant || remoteJid,
-                    isReplyToCommand: true
-                });
-                return;
-            }
-
-            // Modo 2: Transcrever sempre (se configurado como 'always')
-            if (this.config.groupMode === 'always' && audioMsg) {
-                await this.processAudioMessage({
-                    targetJid: remoteJid,
-                    rawMsgToDownload: rawMsg,
-                    quoteMsgToReply: rawMsg,
-                    reactionKey: rawMsg.key,
-                    fromMe,
-                    isGroup: true,
-                    sender: rawMsg.key.participant || remoteJid
-                });
-                return;
-            }
+        if (isGroup && this.config.groupMode === 'always' && audioMsg) {
+            await this.processAudioMessage({
+                targetJid: remoteJid,
+                rawMsgToDownload: rawMsg,
+                quoteMsgToReply: rawMsg,
+                reactionKey: rawMsg.key,
+                fromMe,
+                isGroup: true,
+                sender: rawMsg.key.participant || remoteJid
+            });
+            return;
         }
     }
 

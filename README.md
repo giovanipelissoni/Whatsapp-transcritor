@@ -22,12 +22,14 @@ Ferramenta local com **Dashboard Web** interativo para transcrever áudios do Wh
 
 ## 🚀 Como Funciona a Transcrição
 
+* **Comando Universal `/transcrever` (Privado e Grupos):**
+  * Responda (cite) qualquer áudio recebido ou enviado com a mensagem `/transcrever` para obter a transcrição sob demanda.
 * **No Privado (DMs):**
   * Qualquer áudio recebido é transcrito automaticamente.
   * Qualquer áudio enviado por você é transcrito automaticamente (configurável no painel).
 * **Em Grupos:**
   * Padrão silencioso: responda (cite) qualquer áudio com a mensagem `/transcrever`.
-  * Pode ser configurado pelo painel para transcrever todos os áudios ou ficar desativado.
+  * Pode ser configurado pelo painel para transcrever todos os áudios automaticamente ou ficar desativado.
 * **Reações no WhatsApp:**
   * ⏳ : Processando áudio / enviando para a Groq Whisper.
   * ✅ : Transcrição enviada com sucesso.
