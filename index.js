@@ -177,6 +177,11 @@ async function startBot() {
 
             const isTranscribeCommand = textMsg.toLowerCase().startsWith('/transcrever');
 
+            // Comandos só podem ser executados pelo próprio usuário
+            if (isTranscribeCommand && !fromMe) {
+                continue;
+            }
+
             // =========================================================================
             // REGRA 1: COMANDO /transcrever (Funciona em TODAS as conversas: Privado e Grupos)
             // =========================================================================

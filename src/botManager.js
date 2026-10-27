@@ -413,6 +413,19 @@ export class BotManager extends EventEmitter {
         const lowerText = textMsg.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
         // =========================================================================
+        // SEGURANÇA: Comandos só podem ser executados pelo próprio usuário (fromMe === true)
+        // Comandos enviados por terceiros são ignorados para proteger a lista e privacidade
+        // =========================================================================
+        const isBotCommand = lowerText.startsWith('/mercado') ||
+                             lowerText.startsWith('/comandos') ||
+                             lowerText.startsWith('/ajuda') ||
+                             lowerText.startsWith('/transcrever');
+
+        if (isBotCommand && !fromMe) {
+            return; // Ignora silenciosamente comandos de terceiros
+        }
+
+        // =========================================================================
         // COMANDO: /comandos (ou /ajuda)
         // =========================================================================
         if (lowerText === '/comandos' || lowerText.startsWith('/comandos ') || lowerText === '/ajuda') {
