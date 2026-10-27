@@ -54,6 +54,7 @@ export class BotManager extends EventEmitter {
         // Whitelist de números autorizados a executar comandos do assistente
         this.whitelistFile = path.resolve('./whitelist.json');
         this.whitelist = [];
+        this.lidMap = new Map(); // Mapeamento bidirecional LID <-> Telefone
         this.loadWhitelist();
 
         // Inicializa Groq SDK
@@ -135,20 +136,44 @@ export class BotManager extends EventEmitter {
     }
 
     async addAllowedNumber(phone, name = '', customLid = null) {
-        const clean = (phone || '').replace(/\D/g, '');
+        const raw = (phone || '').trim();
+        const clean = raw.replace(/\D/g, '');
         if (!clean || clean.length < 8) {
-            throw new Error('Informe um número de telefone válido com DDD (mínimo 8 dígitos).');
+            throw new Error('Informe um número de telefone válido com DDD ou LID (mínimo 8 dígitos).');
         }
 
         let resolvedLid = customLid ? customLid.trim() : null;
 
-        // Se o socket estiver conectado, tenta resolver o LID no WhatsApp
+        // Se o usuário passou um LID diretamente (ex: 164064042983460@lid ou 15 dígitos sem 55)
+        if (!resolvedLid && (raw.includes('@lid') || (clean.length >= 14 && clean.length <= 16 && !clean.startsWith('55')))) {
+            resolvedLid = clean.includes('@lid') ? clean : `${clean}@lid`;
+        }
+
+        // Se já conhecemos o LID no mapa em memória (via contatos sincronizados ou mensagens)
+        if (!resolvedLid && this.lidMap && this.lidMap.has(clean)) {
+            resolvedLid = `${this.lidMap.get(clean)}@lid`;
+        }
+
+        // Se o socket estiver conectado e não for LID direto, tenta resolver no WhatsApp
         if (!resolvedLid && this.sock && typeof this.sock.onWhatsApp === 'function') {
             try {
-                const queries = [
-                    (clean.length === 10 || clean.length === 11) && !clean.startsWith('55') ? `55${clean}` : clean,
-                    clean
-                ];
+                const queries = [];
+                let intlNumber = clean;
+                if ((clean.length === 10 || clean.length === 11) && !clean.startsWith('55')) {
+                    intlNumber = `55${clean}`;
+                }
+                if (intlNumber.startsWith('55')) {
+                    queries.push(intlNumber);
+                    // Variação sem 9º dígito (12 dígitos) se tiver 13
+                    if (intlNumber.length === 13 && intlNumber[4] === '9') {
+                        queries.push(`${intlNumber.slice(0, 4)}${intlNumber.slice(5)}`);
+                    } else if (intlNumber.length === 12) {
+                        queries.push(`${intlNumber.slice(0, 4)}9${intlNumber.slice(4)}`);
+                    }
+                } else {
+                    queries.push(intlNumber);
+                }
+
                 for (const q of queries) {
                     const results = await this.sock.onWhatsApp(q);
                     if (Array.isArray(results) && results.length > 0) {
@@ -162,8 +187,9 @@ export class BotManager extends EventEmitter {
             } catch {}
         }
 
-        const existing = this.whitelist.find(item => item.phone === clean);
+        const existing = this.whitelist.find(item => item.phone === clean || (resolvedLid && item.lid === resolvedLid));
         if (existing) {
+            existing.phone = clean;
             existing.name = name ? name.trim() : existing.name;
             if (resolvedLid) existing.lid = resolvedLid;
         } else {
@@ -185,7 +211,7 @@ export class BotManager extends EventEmitter {
     removeAllowedNumber(phone) {
         const clean = (phone || '').replace(/\D/g, '');
         const prevLength = this.whitelist.length;
-        this.whitelist = this.whitelist.filter(item => item.phone !== clean);
+        this.whitelist = this.whitelist.filter(item => item.phone !== clean && (!item.lid || !item.lid.includes(clean)));
 
         if (this.whitelist.length !== prevLength) {
             this.saveWhitelist();
@@ -204,10 +230,22 @@ export class BotManager extends EventEmitter {
             if (!entry.lid && entry.phone) {
                 try {
                     const clean = entry.phone.replace(/\D/g, '');
-                    const queries = [
-                        (clean.length === 10 || clean.length === 11) && !clean.startsWith('55') ? `55${clean}` : clean,
-                        clean
-                    ];
+                    const queries = [];
+                    let intlNumber = clean;
+                    if ((clean.length === 10 || clean.length === 11) && !clean.startsWith('55')) {
+                        intlNumber = `55${clean}`;
+                    }
+                    if (intlNumber.startsWith('55')) {
+                        queries.push(intlNumber);
+                        if (intlNumber.length === 13 && intlNumber[4] === '9') {
+                            queries.push(`${intlNumber.slice(0, 4)}${intlNumber.slice(5)}`);
+                        } else if (intlNumber.length === 12) {
+                            queries.push(`${intlNumber.slice(0, 4)}9${intlNumber.slice(4)}`);
+                        }
+                    } else {
+                        queries.push(intlNumber);
+                    }
+
                     for (const q of queries) {
                         const results = await this.sock.onWhatsApp(q);
                         if (Array.isArray(results) && results.length > 0) {
@@ -247,28 +285,47 @@ export class BotManager extends EventEmitter {
             const senderDigits = senderPart.replace(/\D/g, '');
             const isLid = jid.endsWith('@lid');
 
+            // Busca mapeamento em memória se disponível
+            const mappedPhone = isLid && this.lidMap ? this.lidMap.get(senderDigits) : null;
+            const mappedLid = !isLid && this.lidMap ? this.lidMap.get(senderDigits) : null;
+
             for (const entry of this.whitelist) {
                 const targetDigits = (entry.phone || '').replace(/\D/g, '');
                 const targetLid = (entry.lid || '').replace(/\D/g, '');
 
-                // 1. Verificação de LID (se o remetente for @lid ou se entry.lid estiver cadastrado)
+                // 1. Verificação direta de LID
                 if (targetLid) {
                     if (senderDigits === targetLid || jid.includes(targetLid)) {
                         return true;
                     }
+                    if (mappedLid && (mappedLid === targetLid || mappedLid === senderDigits)) {
+                        return true;
+                    }
                 }
 
-                // 2. Se o identificador cadastrado for exatamente o senderDigits
+                // 2. Verificação via mapeamento automático LID -> Telefone
+                if (mappedPhone && targetDigits) {
+                    if (mappedPhone === targetDigits || mappedPhone.endsWith(targetDigits) || targetDigits.endsWith(mappedPhone)) {
+                        return true;
+                    }
+                    if (mappedPhone.length >= 10 && targetDigits.length >= 10) {
+                        if (mappedPhone.slice(-8) === targetDigits.slice(-8)) {
+                            return true;
+                        }
+                    }
+                }
+
+                // 3. Se o identificador cadastrado for exatamente o senderDigits
                 if (senderDigits === targetDigits) return true;
 
-                // 3. Correspondência com ou sem DDI (55)
+                // 4. Correspondência com ou sem DDI (55)
                 if (!isLid && targetDigits) {
                     if (senderDigits.endsWith(targetDigits) || targetDigits.endsWith(senderDigits)) {
                         const minLen = Math.min(senderDigits.length, targetDigits.length);
                         if (minLen >= 8) return true;
                     }
 
-                    // 4. Variação do 9º dígito celular no Brasil (compara os últimos 8 dígitos)
+                    // 5. Variação do 9º dígito celular no Brasil (compara os últimos 8 dígitos)
                     if (senderDigits.length >= 10 && targetDigits.length >= 10) {
                         const last8Sender = senderDigits.slice(-8);
                         const last8Target = targetDigits.slice(-8);
@@ -621,6 +678,37 @@ export class BotManager extends EventEmitter {
                 }
             });
 
+            // Mapeamento automático de contatos e LIDs
+            this.sock.ev.on('contacts.upsert', (contacts) => {
+                if (Array.isArray(contacts)) {
+                    for (const c of contacts) {
+                        if (c.id && c.lid) {
+                            const phoneDigits = c.id.split('@')[0].replace(/\D/g, '');
+                            const lidDigits = c.lid.split('@')[0].replace(/\D/g, '');
+                            if (phoneDigits && lidDigits) {
+                                this.lidMap.set(lidDigits, phoneDigits);
+                                this.lidMap.set(phoneDigits, lidDigits);
+                            }
+                        }
+                    }
+                }
+            });
+
+            this.sock.ev.on('contacts.update', (contacts) => {
+                if (Array.isArray(contacts)) {
+                    for (const c of contacts) {
+                        if (c.id && c.lid) {
+                            const phoneDigits = c.id.split('@')[0].replace(/\D/g, '');
+                            const lidDigits = c.lid.split('@')[0].replace(/\D/g, '');
+                            if (phoneDigits && lidDigits) {
+                                this.lidMap.set(lidDigits, phoneDigits);
+                                this.lidMap.set(phoneDigits, lidDigits);
+                            }
+                        }
+                    }
+                }
+            });
+
             // Tratamento de mensagens recebidas
             this.sock.ev.on('messages.upsert', async ({ messages, type }) => {
                 if (type !== 'notify') return;
@@ -699,14 +787,32 @@ export class BotManager extends EventEmitter {
 
         if (isBotCommand) {
             const isAuthorized = fromMe || this.isSenderAuthorized(rawMsg);
-            const senderName = rawMsg.pushName ? ` (${rawMsg.pushName})` : '';
+            const senderJid = isGroup ? (rawMsg.key?.participant || remoteJid) : remoteJid;
+            const senderPart = senderJid ? senderJid.split('@')[0].split(':')[0] : '';
+            const contextType = isGroup ? '[Grupo]' : '[Privado]';
+            const senderDisplay = fromMe
+                ? `Você (${this.connectedUser?.name || 'Giovani'})`
+                : (rawMsg.pushName ? `${rawMsg.pushName} [${senderPart}]` : senderPart);
 
             if (!isAuthorized) {
-                this.addLog('warn', `⛔ Comando "${textMsg}" de "${remoteJid}"${senderName} BLOQUEADO: remetente não autorizado na whitelist.`);
+                this.addLog('warn', `⛔ ${contextType} Comando "${textMsg}" de ${senderDisplay} BLOQUEADO: remetente não autorizado na whitelist.`);
                 return;
             }
 
-            this.addLog('info', `📨 Comando "${textMsg}" de "${remoteJid}"${senderName} AUTORIZADO! Processando resposta...`);
+            // Se for @lid autorizado, garante que o LID fique salvo no registro da whitelist
+            if (senderJid.endsWith('@lid')) {
+                const cleanLid = senderJid.split('@')[0].replace(/\D/g, '');
+                for (const entry of this.whitelist) {
+                    const targetLid = (entry.lid || '').replace(/\D/g, '');
+                    if (targetLid === cleanLid && !entry.lid.includes('@lid')) {
+                        entry.lid = senderJid;
+                        this.saveWhitelist();
+                        this.emit('whitelist_updated', this.whitelist);
+                    }
+                }
+            }
+
+            this.addLog('info', `📨 ${contextType} Comando "${textMsg}" de ${senderDisplay} AUTORIZADO! Processando resposta...`);
         }
 
         // =========================================================================
