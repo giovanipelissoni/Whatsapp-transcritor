@@ -1346,3 +1346,120 @@ body {
     font-family: var(--font-mono);
     color: var(--primary);
 }
+
+/* Whitelist Card */
+.whitelist-card {
+    gap: 0.85rem;
+}
+
+.whitelist-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.whitelist-desc {
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    line-height: 1.45;
+}
+
+.whitelist-desc code {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.1rem 0.35rem;
+    border-radius: var(--radius-sm);
+    color: var(--primary);
+    font-family: var(--font-mono);
+}
+
+.whitelist-add-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background: var(--bg-surface);
+    padding: 0.85rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+}
+
+.whitelist-inputs-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.whitelist-inputs-row .form-input {
+    flex: 1;
+    min-width: 130px;
+    font-size: 0.84rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.whitelist-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.whitelist-item-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius-md);
+    transition: all 0.15s ease;
+}
+
+.whitelist-item-row:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-surface-hover);
+}
+
+.whitelist-item-info {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.whitelist-item-name {
+    font-weight: 600;
+    color: #FFFFFF;
+    font-size: 0.88rem;
+}
+
+.whitelist-item-phone {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--primary);
+    background: var(--primary-subtle);
+    padding: 0.1rem 0.45rem;
+    border-radius: var(--radius-sm);
+}
+
+.whitelist-item-del {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0.25rem 0.4rem;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+}
+
+.whitelist-item-del:hover {
+    color: #F87171;
+    background: var(--danger-subtle);
+}
+
+.whitelist-empty {
+    text-align: center;
+    padding: 1rem 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}

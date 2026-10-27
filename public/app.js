@@ -71,6 +71,13 @@ const btnApplyAllSuggestions = document.getElementById('btnApplyAllSuggestions')
 const marketListContainer = document.getElementById('marketListContainer');
 const emptyMarketState = document.getElementById('emptyMarketState');
 
+// Elementos da Whitelist de Comandos
+const whitelistCountBadge = document.getElementById('whitelistCountBadge');
+const whitelistPhoneInput = document.getElementById('whitelistPhoneInput');
+const whitelistNameInput = document.getElementById('whitelistNameInput');
+const btnAddWhitelistNumber = document.getElementById('btnAddWhitelistNumber');
+const whitelistContainer = document.getElementById('whitelistContainer');
+
 // Estado de filtro de categorias
 let activeCategoryFilter = 'all';
 let cachedMarketItems = [];
@@ -138,6 +145,16 @@ function setupEventSource() {
         renderMarketItems(items);
     });
 
+    eventSource.addEventListener('whitelist_init', (e) => {
+        const items = JSON.parse(e.data);
+        renderWhitelist(items);
+    });
+
+    eventSource.addEventListener('whitelist_update', (e) => {
+        const items = JSON.parse(e.data);
+        renderWhitelist(items);
+    });
+
     eventSource.addEventListener('log', (e) => {
         const log = JSON.parse(e.data);
         appendLog(log);
@@ -189,6 +206,10 @@ function updateStatusUI(data) {
         if (document.activeElement !== cfgPrivateAudio) cfgPrivateAudio.checked = Boolean(data.config.transcribePrivateAudio);
         if (document.activeElement !== cfgMyOwnAudio) cfgMyOwnAudio.checked = Boolean(data.config.transcribeMyOwnAudio);
         if (document.activeElement !== cfgGroupMode) cfgGroupMode.value = data.config.groupMode || 'command';
+    }
+
+    if (data.whitelist) {
+        renderWhitelist(data.whitelist);
     }
 
     // Configuração dos Botões e Views conforme Status
@@ -828,6 +849,130 @@ if (btnApplyAllSuggestions) {
             showToast('Erro ao aplicar sugestões', 'error');
         } finally {
             btnApplyAllSuggestions.disabled = false;
+        }
+    });
+}
+
+// ==========================================
+// Whitelist de Números Autorizados
+// ==========================================
+function formatPhone(phone) {
+    const clean = (phone || '').replace(/\D/g, '');
+    if (clean.length === 13) {
+        return `+${clean.slice(0, 2)} (${clean.slice(2, 4)}) ${clean.slice(4, 9)}-${clean.slice(9)}`;
+    } else if (clean.length === 11) {
+        return `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7)}`;
+    }
+    return `+${clean}`;
+}
+
+function renderWhitelist(whitelist) {
+    if (!whitelistContainer) return;
+    if (!Array.isArray(whitelist)) return;
+
+    if (whitelistCountBadge) {
+        whitelistCountBadge.textContent = `${whitelist.length} autorizado${whitelist.length === 1 ? '' : 's'}`;
+    }
+
+    if (whitelist.length === 0) {
+        whitelistContainer.innerHTML = `
+            <div class="whitelist-empty">
+                Nenhum número cadastrado na whitelist.<br>
+                <span>Apenas você pode executar comandos no WhatsApp.</span>
+            </div>
+        `;
+        return;
+    }
+
+    whitelistContainer.innerHTML = '';
+    whitelist.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'whitelist-item-row';
+        row.innerHTML = `
+            <div class="whitelist-item-info">
+                <span>👤</span>
+                <span class="whitelist-item-name">${escapeHtml(item.name || 'Autorizado')}</span>
+                <span class="whitelist-item-phone">${escapeHtml(formatPhone(item.phone))}</span>
+            </div>
+            <button class="whitelist-item-del" onclick="removeWhitelistNumber('${item.phone}')" title="Revogar acesso aos comandos">🗑️</button>
+        `;
+        whitelistContainer.appendChild(row);
+    });
+}
+
+async function addWhitelistNumber() {
+    if (!whitelistPhoneInput) return;
+    const phone = whitelistPhoneInput.value.trim();
+    const name = whitelistNameInput ? whitelistNameInput.value.trim() : '';
+
+    if (!phone) {
+        showToast('Informe o número de telefone (com DDI e DDD)', 'error');
+        whitelistPhoneInput.focus();
+        return;
+    }
+
+    if (btnAddWhitelistNumber) btnAddWhitelistNumber.disabled = true;
+
+    try {
+        const res = await fetch('/api/whitelist/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, name })
+        });
+        const data = await res.json();
+        if (data.success) {
+            whitelistPhoneInput.value = '';
+            if (whitelistNameInput) whitelistNameInput.value = '';
+            showToast('Número autorizado com sucesso!', 'info');
+        } else {
+            showToast(data.error || 'Erro ao autorizar número', 'error');
+        }
+    } catch (e) {
+        showToast('Erro de rede: ' + e.message, 'error');
+    } finally {
+        if (btnAddWhitelistNumber) btnAddWhitelistNumber.disabled = false;
+    }
+}
+
+window.removeWhitelistNumber = async function(phone) {
+    const confirmRemove = confirm(`Deseja revogar o acesso do número +${phone}?`);
+    if (!confirmRemove) return;
+
+    try {
+        const res = await fetch('/api/whitelist/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('Acesso revogado com sucesso!', 'info');
+        } else {
+            showToast(data.error || 'Erro ao remover', 'error');
+        }
+    } catch (e) {
+        showToast('Erro de rede: ' + e.message, 'error');
+    }
+};
+
+if (btnAddWhitelistNumber) {
+    btnAddWhitelistNumber.addEventListener('click', addWhitelistNumber);
+}
+
+if (whitelistPhoneInput) {
+    whitelistPhoneInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addWhitelistNumber();
+        }
+    });
+}
+
+if (whitelistNameInput) {
+    whitelistNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addWhitelistNumber();
         }
     });
 }

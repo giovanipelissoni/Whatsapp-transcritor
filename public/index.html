@@ -240,6 +240,36 @@
                         </div>
                     </div>
                 </section>
+
+                <!-- Whitelist de Números Autorizados Card -->
+                <section class="card whitelist-card">
+                    <div class="card-header">
+                        <div class="whitelist-header-left">
+                            <span class="whitelist-icon">🛡️</span>
+                            <h2>Números Autorizados (Whitelist)</h2>
+                        </div>
+                        <span id="whitelistCountBadge" class="badge badge-success">1 autorizado</span>
+                    </div>
+
+                    <p class="whitelist-desc">
+                        Contatos cadastrados aqui podem usar todos os comandos do assistente (<code>/mercado</code>, <code>/comandos</code>, <code>/transcrever</code>) na conversa privada com você.
+                    </p>
+
+                    <div class="whitelist-add-form">
+                        <div class="whitelist-inputs-row">
+                            <input type="tel" id="whitelistPhoneInput" class="form-input" placeholder="Telefone (ex: 5511943495006)">
+                            <input type="text" id="whitelistNameInput" class="form-input" placeholder="Identificação (ex: Esposa)">
+                        </div>
+                        <button id="btnAddWhitelistNumber" class="btn btn-primary btn-sm">
+                            <span>➕</span>
+                            <span>Autorizar Número</span>
+                        </button>
+                    </div>
+
+                    <div id="whitelistContainer" class="whitelist-container">
+                        <!-- Itens da Whitelist serão inseridos aqui -->
+                    </div>
+                </section>
             </div>
 
             <!-- Right Column: Live Transcription Feed & Console Logs -->

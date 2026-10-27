@@ -51,6 +51,11 @@ export class BotManager extends EventEmitter {
         // Gerenciador da Lista de Mercado
         this.market = new MarketManager();
 
+        // Whitelist de números autorizados a executar comandos do assistente
+        this.whitelistFile = path.resolve('./whitelist.json');
+        this.whitelist = [];
+        this.loadWhitelist();
+
         // Inicializa Groq SDK
         const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey || apiKey === 'SUA_CHAVE_GROQ_AQUI') {
@@ -90,8 +95,124 @@ export class BotManager extends EventEmitter {
             isTranscribingEnabled: this.isTranscribingEnabled,
             config: this.config,
             stats: this.stats,
-            hasGroqKey: Boolean(this.groq)
+            hasGroqKey: Boolean(this.groq),
+            whitelist: this.whitelist
         };
+    }
+
+    loadWhitelist() {
+        try {
+            if (fs.existsSync(this.whitelistFile)) {
+                const data = JSON.parse(fs.readFileSync(this.whitelistFile, 'utf8'));
+                if (Array.isArray(data)) {
+                    this.whitelist = data;
+                    return;
+                }
+            }
+            this.whitelist = [
+                {
+                    phone: '5511943495006',
+                    name: 'Esposa',
+                    createdAt: new Date().toISOString()
+                }
+            ];
+            this.saveWhitelist();
+        } catch {
+            this.whitelist = [];
+        }
+    }
+
+    saveWhitelist() {
+        try {
+            fs.writeFileSync(this.whitelistFile, JSON.stringify(this.whitelist, null, 2), 'utf8');
+        } catch (err) {
+            this.addLog('error', `Erro ao salvar whitelist.json: ${err.message}`);
+        }
+    }
+
+    getWhitelist() {
+        return this.whitelist;
+    }
+
+    addAllowedNumber(phone, name = '') {
+        const clean = (phone || '').replace(/\D/g, '');
+        if (!clean || clean.length < 8) {
+            throw new Error('Informe um número de telefone válido com DDD (mínimo 8 dígitos).');
+        }
+
+        const existing = this.whitelist.find(item => item.phone === clean);
+        if (existing) {
+            existing.name = name ? name.trim() : existing.name;
+        } else {
+            this.whitelist.push({
+                phone: clean,
+                name: name ? name.trim() : 'Autorizado',
+                createdAt: new Date().toISOString()
+            });
+        }
+
+        this.saveWhitelist();
+        this.emit('whitelist_updated', this.whitelist);
+        this.emit('status_change', this.getStatus());
+        this.addLog('info', `Número adicionado à whitelist de comandos: +${clean} (${name || 'Autorizado'})`);
+        return this.whitelist;
+    }
+
+    removeAllowedNumber(phone) {
+        const clean = (phone || '').replace(/\D/g, '');
+        const prevLength = this.whitelist.length;
+        this.whitelist = this.whitelist.filter(item => item.phone !== clean);
+
+        if (this.whitelist.length !== prevLength) {
+            this.saveWhitelist();
+            this.emit('whitelist_updated', this.whitelist);
+            this.emit('status_change', this.getStatus());
+            this.addLog('info', `Número removido da whitelist de comandos: +${clean}`);
+        }
+        return this.whitelist;
+    }
+
+    isSenderAuthorized(rawMsg) {
+        if (!rawMsg) return false;
+        if (rawMsg.key?.fromMe) return true;
+
+        const jids = [
+            rawMsg.key?.participant,
+            rawMsg.key?.remoteJid,
+            rawMsg.participant
+        ].filter(Boolean);
+
+        for (const jid of jids) {
+            const senderPart = jid.split('@')[0].split(':')[0];
+            const senderDigits = senderPart.replace(/\D/g, '');
+
+            if (!senderDigits) continue;
+
+            for (const entry of this.whitelist) {
+                const targetDigits = (entry.phone || '').replace(/\D/g, '');
+                if (!targetDigits) continue;
+
+                // 1. Igualdade exata
+                if (senderDigits === targetDigits) return true;
+
+                // 2. Correspondência com ou sem DDI (ex: 5511943495006 vs 11943495006)
+                if (senderDigits.endsWith(targetDigits) || targetDigits.endsWith(senderDigits)) {
+                    const minLen = Math.min(senderDigits.length, targetDigits.length);
+                    if (minLen >= 8) return true;
+                }
+
+                // 3. Variação do 9º dígito celular no Brasil (compara os últimos 8 dígitos)
+                if (senderDigits.length >= 10 && targetDigits.length >= 10) {
+                    const last8Sender = senderDigits.slice(-8);
+                    const last8Target = targetDigits.slice(-8);
+                    if (last8Sender === last8Target) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     updateConfig(newConfig) {
@@ -413,16 +534,20 @@ export class BotManager extends EventEmitter {
         const lowerText = textMsg.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
         // =========================================================================
-        // SEGURANÇA: Comandos só podem ser executados pelo próprio usuário (fromMe === true)
-        // Comandos enviados por terceiros são ignorados para proteger a lista e privacidade
+        // SEGURANÇA: Comandos só podem ser executados por você (fromMe === true)
+        // ou por contatos autorizados na Whitelist do Dashboard (ex: Esposa)
+        // Comandos enviados por terceiros não autorizados são ignorados
         // =========================================================================
         const isBotCommand = lowerText.startsWith('/mercado') ||
                              lowerText.startsWith('/comandos') ||
                              lowerText.startsWith('/ajuda') ||
                              lowerText.startsWith('/transcrever');
 
-        if (isBotCommand && !fromMe) {
-            return; // Ignora silenciosamente comandos de terceiros
+        if (isBotCommand) {
+            const isAuthorized = fromMe || this.isSenderAuthorized(rawMsg);
+            if (!isAuthorized) {
+                return; // Ignora silenciosamente comandos de números não autorizados
+            }
         }
 
         // =========================================================================

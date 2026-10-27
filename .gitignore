@@ -15,6 +15,7 @@ tokens/
 creds.json
 processed_ids.json
 mercado_lista.json
+whitelist.json
 *session*
 
 # Arquivos de mídia temporários e downloads

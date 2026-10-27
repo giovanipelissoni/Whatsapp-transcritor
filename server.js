@@ -49,6 +49,10 @@ bot.on('market_updated', (items) => {
     broadcastSSE('market_update', items);
 });
 
+bot.on('whitelist_updated', (whitelist) => {
+    broadcastSSE('whitelist_update', whitelist);
+});
+
 bot.on('log', (log) => {
     recentLogs.push(log);
     if (recentLogs.length > 100) recentLogs.shift();
@@ -68,6 +72,7 @@ app.get('/api/events', (req, res) => {
     res.write(`event: logs_init\ndata: ${JSON.stringify(recentLogs.slice(-25))}\n\n`);
     res.write(`event: transcriptions_init\ndata: ${JSON.stringify(bot.recentTranscriptions)}\n\n`);
     res.write(`event: market_init\ndata: ${JSON.stringify(bot.market.getItems())}\n\n`);
+    res.write(`event: whitelist_init\ndata: ${JSON.stringify(bot.getWhitelist())}\n\n`);
 
     sseClients.add(res);
 
@@ -147,6 +152,33 @@ app.get('/api/transcriptions', (req, res) => {
 
 app.get('/api/logs', (req, res) => {
     res.json({ logs: recentLogs });
+});
+
+// ==========================================
+// Rotas de Whitelist de Números Autorizados
+// ==========================================
+app.get('/api/whitelist', (req, res) => {
+    res.json({ success: true, whitelist: bot.getWhitelist() });
+});
+
+app.post('/api/whitelist/add', (req, res) => {
+    const { phone, name } = req.body;
+    try {
+        const updated = bot.addAllowedNumber(phone, name);
+        res.json({ success: true, whitelist: updated });
+    } catch (err) {
+        res.status(400).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/whitelist/remove', (req, res) => {
+    const { phone } = req.body;
+    try {
+        const updated = bot.removeAllowedNumber(phone);
+        res.json({ success: true, whitelist: updated });
+    } catch (err) {
+        res.status(400).json({ success: false, error: err.message });
+    }
 });
 
 // ==========================================
