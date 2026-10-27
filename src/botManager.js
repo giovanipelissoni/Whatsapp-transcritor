@@ -309,13 +309,20 @@ export class BotManager extends EventEmitter {
     }
 
     async requestPairingCode(phoneNumber) {
+        const cleanPhone = (phoneNumber || '').replace(/\D/g, '');
+        if (!cleanPhone || cleanPhone.length < 10) {
+            throw new Error('Informe o número completo com DDI e DDD (ex: 5511999998888).');
+        }
+
         if (!this.sock) {
             await this.start();
         }
 
-        const cleanPhone = (phoneNumber || '').replace(/\D/g, '');
-        if (!cleanPhone || cleanPhone.length < 10) {
-            throw new Error('Informe o número com DDI e DDD (ex: 5511999998888).');
+        // Aguarda o socket estabelecer a conexão com os servidores do WhatsApp
+        let waited = 0;
+        while (!this.sock?.ws?.isOpen && !this.rawQr && waited < 4000) {
+            await new Promise((r) => setTimeout(r, 200));
+            waited += 200;
         }
 
         try {
@@ -328,7 +335,7 @@ export class BotManager extends EventEmitter {
             return formatted;
         } catch (err) {
             this.addLog('error', `Falha ao gerar código de pareamento: ${err.message}`);
-            throw err;
+            throw new Error(`Falha no WhatsApp: ${err.message}`);
         }
     }
 

@@ -135,7 +135,15 @@ app.get('/api/logs', (req, res) => {
     res.json({ logs: recentLogs });
 });
 
-// Rota fallback para SPA
+// Rota 404 para endpoints de API (impede que requisições de API recebam HTML por engano)
+app.use('/api', (req, res) => {
+    res.status(404).json({
+        success: false,
+        error: `Endpoint não encontrado: ${req.method} ${req.originalUrl}. Reinicie o servidor se adicionou novas rotas.`
+    });
+});
+
+// Rota fallback para SPA (apenas para páginas)
 app.use((req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

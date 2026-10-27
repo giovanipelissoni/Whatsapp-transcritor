@@ -278,11 +278,18 @@ if (btnRequestPairingCode) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phoneNumber: phone })
             });
+
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                showToast('Servidor desatualizado! Feche a janela preta do iniciar.bat e abra-a novamente.', 'error');
+                return;
+            }
+
             const data = await res.json();
             if (data.success && data.code) {
                 pairingCodeValue.textContent = data.code;
                 pairingCodeDisplayBox.classList.remove('hidden');
-                showToast('Código gerado! Digite no WhatsApp.', 'info');
+                showToast('Código gerado com sucesso! Digite no WhatsApp.', 'info');
             } else {
                 showToast(data.error || 'Erro ao gerar código.', 'error');
             }
