@@ -283,6 +283,91 @@ export class BotManager extends EventEmitter {
         return false;
     }
 
+    async sendMarketPoll(targetJid, categoryFilter = null, quotedMsg = null) {
+        if (!this.sock) throw new Error('WhatsApp não está conectado.');
+
+        const items = this.market.getItems();
+        if (items.length === 0) {
+            await this.sock.sendMessage(targetJid, {
+                text: '🛒 *Sua lista de mercado está vazia!*\n\nAdicione itens antes de gerar a enquete checklist.'
+            }, { quoted: quotedMsg });
+            return;
+        }
+
+        // Se houver filtro por seção/categoria (ex: hortifruti)
+        if (categoryFilter) {
+            const normFilter = this.market.normalizeStr(categoryFilter);
+            const groups = this.market.getItemsGrouped();
+            const matchedGroup = groups.find(g => this.market.normalizeStr(g.category).includes(normFilter));
+
+            if (!matchedGroup) {
+                const available = groups.map(g => `${g.icon} ${g.category}`).join('\n• ');
+                await this.sock.sendMessage(targetJid, {
+                    text: `❌ Seção "*${categoryFilter}*" não encontrada.\n\nSeções com produtos:\n• ${available}`
+                }, { quoted: quotedMsg });
+                return;
+            }
+
+            // WhatsApp limita a no máximo 12 opções por enquete
+            const chunks = [];
+            for (let i = 0; i < matchedGroup.items.length; i += 12) {
+                chunks.push(matchedGroup.items.slice(i, i + 12));
+            }
+
+            for (let idx = 0; idx < chunks.length; idx++) {
+                const chunk = chunks[idx];
+                const partSuffix = chunks.length > 1 ? ` (Parte ${idx + 1}/${chunks.length})` : '';
+                await this.sock.sendMessage(targetJid, {
+                    poll: {
+                        name: `${matchedGroup.icon} ${matchedGroup.category}${partSuffix}`,
+                        values: chunk.map(i => i.name),
+                        selectableCount: 0 // 0 = Seleção múltipla / Checklist interativo!
+                    }
+                }, { quoted: idx === 0 ? quotedMsg : undefined });
+                await new Promise(r => setTimeout(r, 300));
+            }
+            return;
+        }
+
+        // Caso A: Total de itens <= 12 -> Envia 1 enquete direta com tudo!
+        if (items.length <= 12) {
+            await this.sock.sendMessage(targetJid, {
+                poll: {
+                    name: `🛒 Lista de Compras (${items.length} itens)`,
+                    values: items.map(i => i.name),
+                    selectableCount: 0 // 0 = Seleção múltipla / Checklist interativo!
+                }
+            }, { quoted: quotedMsg });
+            return;
+        }
+
+        // Caso B: Total > 12 itens -> Envia enquetes organizadas por seção do supermercado!
+        const groups = this.market.getItemsGrouped();
+        await this.sock.sendMessage(targetJid, {
+            text: `🛒 *Lista de Compras em Enquete (Checklist):*\n\nSeparadas por seções para facilitar suas compras. Basta tocar nas opções para marcar como comprado! 👇`
+        }, { quoted: quotedMsg });
+
+        for (const group of groups) {
+            const chunks = [];
+            for (let i = 0; i < group.items.length; i += 12) {
+                chunks.push(group.items.slice(i, i + 12));
+            }
+
+            for (let idx = 0; idx < chunks.length; idx++) {
+                const chunk = chunks[idx];
+                const partSuffix = chunks.length > 1 ? ` (Parte ${idx + 1}/${chunks.length})` : '';
+                await this.sock.sendMessage(targetJid, {
+                    poll: {
+                        name: `${group.icon} ${group.category}${partSuffix}`,
+                        values: chunk.map(i => i.name),
+                        selectableCount: 0
+                    }
+                });
+                await new Promise(r => setTimeout(r, 350));
+            }
+        }
+    }
+
     updateConfig(newConfig) {
         this.config = { ...this.config, ...newConfig };
         this.emit('config_updated', this.config);
@@ -640,6 +725,8 @@ export class BotManager extends EventEmitter {
 
 🛒 *Lista de Mercado por Categorias:*
 • */mercado*: Exibe a lista completa organizada por seções (Hortifrúti, Carnes, Laticínios, Limpeza...).
+• */mercado enquete*: Transforma a lista em Enquete Interativa (Checklist nativo do WhatsApp)!
+• */mercado enquete [seção]*: Envia enquete apenas de uma seção (ex: */mercado enquete hortifruti*).
 • */mercado [seção]*: Filtra apenas uma seção (ex: */mercado hortifruti*, */mercado limpeza*).
 • */mercado marcar [número]*: Marca ou desmarca um item como comprado no supermercado.
 • */mercado adicionar [item]*: Adiciona produtos com categorização automática inteligente.
@@ -784,6 +871,13 @@ export class BotManager extends EventEmitter {
                         text: `❌ Erro ao gerar sugestões com IA: ${err.message}`
                     }, { quoted: rawMsg });
                 }
+                return;
+            }
+
+            // Subcomando 7: /mercado enquete ou /mercado checklist ou /mercado poll
+            if (lowerText.startsWith('/mercado enquete') || lowerText.startsWith('/mercado checklist') || lowerText.startsWith('/mercado poll')) {
+                const subArg = textMsg.replace(/^\/mercado\s+(enquete|checklist|poll)\s*/i, '').trim();
+                await this.sendMarketPoll(remoteJid, subArg || null, rawMsg);
                 return;
             }
 

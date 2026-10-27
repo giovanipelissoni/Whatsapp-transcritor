@@ -59,6 +59,7 @@ const marketBadgeCount = document.getElementById('marketBadgeCount');
 
 // Elementos da Lista de Mercado
 const marketStatusStats = document.getElementById('marketStatusStats');
+const btnSendPollMarket = document.getElementById('btnSendPollMarket');
 const btnAiSuggest = document.getElementById('btnAiSuggest');
 const btnClearMarket = document.getElementById('btnClearMarket');
 const marketInputItem = document.getElementById('marketInputItem');
@@ -849,6 +850,35 @@ if (btnApplyAllSuggestions) {
             showToast('Erro ao aplicar sugestões', 'error');
         } finally {
             btnApplyAllSuggestions.disabled = false;
+        }
+    });
+}
+
+// Enviar Enquete Checklist Interativa para o WhatsApp
+if (btnSendPollMarket) {
+    btnSendPollMarket.addEventListener('click', async () => {
+        btnSendPollMarket.disabled = true;
+        const originalText = btnSendPollMarket.innerHTML;
+        btnSendPollMarket.innerHTML = '<span>⏳</span><span>Enviando Enquete...</span>';
+
+        try {
+            const categoryToSend = activeCategoryFilter === 'all' ? null : activeCategoryFilter;
+            const res = await fetch('/api/market/send-poll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category: categoryToSend })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast(categoryToSend ? `Enquete de ${categoryToSend} enviada!` : 'Enquetes checklist enviadas para o WhatsApp!', 'success');
+            } else {
+                showToast(data.error || 'Erro ao enviar enquete para o WhatsApp.', 'error');
+            }
+        } catch (e) {
+            showToast('Erro de rede: ' + e.message, 'error');
+        } finally {
+            btnSendPollMarket.disabled = false;
+            btnSendPollMarket.innerHTML = originalText;
         }
     });
 }

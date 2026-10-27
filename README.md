@@ -46,7 +46,9 @@ Você pode gerenciar sua lista de compras tanto pelo WhatsApp quanto pelo Painel
 
 * **/comandos**: Exibe todos os comandos do assistente e suas descrições.
 * **/mercado**: Exibe a lista completa de compras agrupada pelas seções do supermercado com barra de progresso.
-* **/mercado [seção]**: Filtra apenas os itens de uma seção específica (ex: `/mercado hortifruti`, `/mercado limpeza`).
+* **/mercado enquete**: Transforma a lista de compras em Enquete Interativa (Checklist com caixas de seleção nativas no WhatsApp)!
+* **/mercado enquete [seção]**: Envia enquete interativa específica de uma seção (ex: `/mercado enquete hortifruti`).
+* **/mercado [seção]**: Filtra apenas os itens de uma seção específica em texto (ex: `/mercado hortifruti`, `/mercado limpeza`).
 * **/mercado marcar [número ou nome]**: Marca ou desmarca o produto como comprado enquanto você faz compras no mercado.
 * **/mercado adicionar [produto]**: Adiciona produtos com categorização automática inteligente (ex: `/mercado adicionar Banana, Peito de frango, Sabão`).
 * **/mercado remover [número ou nome]**: Remove um produto específico da lista.

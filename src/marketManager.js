@@ -450,7 +450,8 @@ export class MarketManager {
 
         msg += `📊 *Progresso:* ${totalChecked}/${totalItems} comprados (${percent}%)\n`;
         msg += `\n💡 *Comandos úteis:*\n`;
-        msg += `• */mercado marcar [número]*  👉 Riscar item comprado\n`;
+        msg += `• */mercado enquete*          👉 Transforma em Enquete Checklist interativa!\n`;
+        msg += `• */mercado marcar [número]*  👉 Riscar item comprado na lista de texto\n`;
         msg += `• */mercado adicionar [item]* 👉 Adicionar produto\n`;
         msg += `• */mercado remover [número]* 👉 Excluir da lista\n`;
         msg += `• */mercado sugestão*         👉 Sugestões inteligentes de IA`;

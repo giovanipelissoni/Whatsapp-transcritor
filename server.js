@@ -243,6 +243,26 @@ app.post('/api/market/apply-suggestions', (req, res) => {
     res.json({ success: true, added, items: bot.market.getItems() });
 });
 
+app.post('/api/market/send-poll', async (req, res) => {
+    try {
+        if (!bot.sock || bot.status !== 'CONNECTED') {
+            return res.status(400).json({ success: false, error: 'WhatsApp não está conectado no momento.' });
+        }
+
+        // Destinatário padrão: o próprio usuário conectado no WhatsApp
+        const targetJid = req.body?.targetJid || bot.sock.user?.id;
+        if (!targetJid) {
+            return res.status(400).json({ success: false, error: 'Nenhum contato conectado para envio.' });
+        }
+
+        const category = req.body?.category || null;
+        await bot.sendMarketPoll(targetJid, category);
+        res.json({ success: true, message: 'Enquete(s) checklist enviada(s) com sucesso!' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Rota 404 para endpoints de API (impede que requisições de API recebam HTML por engano)
 app.use('/api', (req, res) => {
     res.status(404).json({
