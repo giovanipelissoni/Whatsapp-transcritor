@@ -445,9 +445,7 @@ export class BotManager extends EventEmitter {
 • */mercado remover [número ou nome]*: Remove um produto da lista.
 • */mercado limpar*: Limpa toda a lista de compras.
 • */mercado sugestão*: Sugere novos produtos usando IA com base na sua lista.
-• */mercado adicionar sugestão*: Adiciona as sugestões geradas à sua lista de compras.
-
-🌐 *Painel Web:* http://localhost:3000`;
+• */mercado adicionar sugestão*: Adiciona as sugestões geradas à sua lista de compras.`;
 
             await this.sock.sendMessage(remoteJid, { text: helpText }, { quoted: rawMsg });
             return;
