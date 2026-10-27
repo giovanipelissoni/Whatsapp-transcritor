@@ -84,7 +84,7 @@
 
                 <!-- Dynamic Connection Status Card (QR Code or Connected Info) -->
                 <section id="connectionCard" class="card connection-card">
-                    <!-- State: Waiting QR Code -->
+                    <!-- State: Waiting QR Code / Pairing Code -->
                     <div id="qrCodeView" class="qr-container hidden">
                         <div class="qr-header">
                             <div class="qr-title">
@@ -102,25 +102,57 @@
                                     <path d="M21 12v.01"></path>
                                     <path d="M12 21v-1"></path>
                                 </svg>
-                                <h3>Escaneie o QR Code</h3>
+                                <h3>Conectar WhatsApp</h3>
                             </div>
-                            <span class="qr-pulse-badge">Aguardando Leitura</span>
+                            <span class="qr-pulse-badge">Aguardando Conexão</span>
                         </div>
 
-                        <div class="qr-display-box">
-                            <img id="qrImage" src="" alt="WhatsApp QR Code" class="qr-image">
-                            <div id="qrLoading" class="qr-spinner hidden">
-                                <div class="spinner"></div>
-                                <span>Gerando novo código...</span>
-                            </div>
+                        <!-- Mode Switcher: QR Code vs Pairing Code -->
+                        <div class="connect-method-tabs">
+                            <button id="tabQrMethod" class="tab-btn active">📷 QR Code</button>
+                            <button id="tabPairingMethod" class="tab-btn">🔢 Código de 8 Dígitos</button>
                         </div>
 
-                        <ol class="qr-instructions">
-                            <li>Abra o <strong>WhatsApp</strong> no seu smartphone.</li>
-                            <li>Toque em <strong>Aparelhos conectados</strong> (no menu ou configurações).</li>
-                            <li>Toque em <strong>Conectar um aparelho</strong>.</li>
-                            <li>Aponte a câmera para este QR Code.</li>
-                        </ol>
+                        <!-- Option 1: QR Code -->
+                        <div id="qrMethodSection" class="connect-method-section">
+                            <div class="qr-display-box">
+                                <img id="qrImage" src="" alt="WhatsApp QR Code" class="qr-image">
+                                <div id="qrLoading" class="qr-spinner hidden">
+                                    <div class="spinner"></div>
+                                    <span>Gerando novo código...</span>
+                                </div>
+                            </div>
+
+                            <ol class="qr-instructions">
+                                <li>Abra o <strong>WhatsApp</strong> no seu celular.</li>
+                                <li>Vá em <strong>Aparelhos conectados > Conectar um aparelho</strong>.</li>
+                                <li>Aponte a câmera para este QR Code.</li>
+                            </ol>
+                        </div>
+
+                        <!-- Option 2: Pairing Code -->
+                        <div id="pairingMethodSection" class="connect-method-section hidden">
+                            <div class="pairing-input-box">
+                                <label for="pairingPhoneInput" class="pairing-label">Número do WhatsApp (com DDI e DDD):</label>
+                                <div class="pairing-input-row">
+                                    <input type="tel" id="pairingPhoneInput" class="form-input" placeholder="Ex: 5511978525006" value="5511978525006">
+                                    <button id="btnRequestPairingCode" class="btn btn-primary btn-sm">Gerar Código</button>
+                                </div>
+                            </div>
+
+                            <div id="pairingCodeDisplayBox" class="pairing-code-display hidden">
+                                <span class="pairing-code-title">DIGITE ESTE CÓDIGO NO WHATSAPP:</span>
+                                <div id="pairingCodeValue" class="pairing-code-digits">----</div>
+                                <button id="btnCopyPairingCode" class="btn btn-ghost btn-sm">📋 Copiar Código</button>
+                            </div>
+
+                            <ol class="qr-instructions">
+                                <li>Abra o <strong>WhatsApp</strong> no seu smartphone.</li>
+                                <li>Vá em <strong>Aparelhos conectados > Conectar um aparelho</strong>.</li>
+                                <li>Toque em <strong>"Conectar com número de telefone"</strong> (no rodapé).</li>
+                                <li>Digite o código de 8 dígitos gerado acima.</li>
+                            </ol>
+                        </div>
                     </div>
 
                     <!-- State: Connected User Info -->

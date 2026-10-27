@@ -3,7 +3,8 @@ import makeWASocket, {
     useMultiFileAuthState,
     downloadMediaMessage,
     DisconnectReason,
-    fetchLatestBaileysVersion
+    fetchLatestBaileysVersion,
+    Browsers
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcodeTerminal from 'qrcode-terminal';
@@ -80,7 +81,13 @@ async function startBot() {
         auth: state,
         logger: pino({ level: 'error' }),
         printQRInTerminal: false,
-        browser: ['Transcritor Local', 'Chrome', '1.0.0']
+        browser: Browsers.ubuntu('Chrome'),
+        syncFullHistory: false,
+        markOnlineOnConnect: true,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 25000,
+        getMessage: async () => ({ conversation: '' })
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -112,10 +119,12 @@ async function startBot() {
                 ? lastDisconnect.error.output?.statusCode
                 : null;
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+            const isRestartRequired = statusCode === DisconnectReason.restartRequired;
             
             console.log(`⚠️ Conexão encerrada. Motivo: ${statusCode || 'desconhecido'}. Reconectar: ${shouldReconnect}`);
             if (shouldReconnect) {
-                setTimeout(() => startBot(), 3000);
+                const delay = isRestartRequired ? 500 : 3000;
+                setTimeout(() => startBot(), delay);
             } else {
                 console.log('❌ Sessão desconectada/revogada. Exclua a pasta auth_info e reinicie para ler o QR Code novamente.');
             }

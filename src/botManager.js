@@ -4,7 +4,8 @@ import makeWASocket, {
     useMultiFileAuthState,
     downloadMediaMessage,
     DisconnectReason,
-    fetchLatestBaileysVersion
+    fetchLatestBaileysVersion,
+    Browsers
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import QRCode from 'qrcode';
@@ -19,10 +20,12 @@ export class BotManager extends EventEmitter {
         this.status = 'STOPPED'; // 'STOPPED' | 'STARTING' | 'WAITING_QR' | 'CONNECTED' | 'ERROR'
         this.qrCodeDataUrl = null;
         this.rawQr = null;
+        this.pairingCode = null;
         this.connectedUser = null;
         this.sock = null;
         this.isTranscribingEnabled = true;
         this.intentionallyStopped = false;
+        this.reconnectAttempts = 0;
 
         this.config = {
             transcribePrivateAudio: true,
@@ -63,6 +66,7 @@ export class BotManager extends EventEmitter {
     setStatus(newStatus, extra = {}) {
         this.status = newStatus;
         if (extra.qrCodeDataUrl !== undefined) this.qrCodeDataUrl = extra.qrCodeDataUrl;
+        if (extra.pairingCode !== undefined) this.pairingCode = extra.pairingCode;
         if (extra.connectedUser !== undefined) this.connectedUser = extra.connectedUser;
         this.emit('status_change', this.getStatus());
     }
@@ -71,6 +75,7 @@ export class BotManager extends EventEmitter {
         return {
             status: this.status,
             qrCodeDataUrl: this.qrCodeDataUrl,
+            pairingCode: this.pairingCode,
             connectedUser: this.connectedUser,
             isTranscribingEnabled: this.isTranscribingEnabled,
             config: this.config,
@@ -138,14 +143,32 @@ export class BotManager extends EventEmitter {
     }
 
     async start() {
-        if (this.status === 'CONNECTED' || this.status === 'STARTING') {
-            this.addLog('info', 'Bot já está em execução ou inicializando.');
+        if (this.status === 'CONNECTED') {
+            this.addLog('info', 'Bot já está conectado.');
             return;
         }
 
         this.intentionallyStopped = false;
-        this.setStatus('STARTING', { qrCodeDataUrl: null });
+        this.reconnectAttempts = 0;
+        this.setStatus('STARTING', { qrCodeDataUrl: null, pairingCode: null });
         this.addLog('info', 'Iniciando conexão do WhatsApp...');
+
+        await this._initSocket();
+    }
+
+    async _initSocket() {
+        if (this.intentionallyStopped) return;
+
+        // Limpa socket e eventos anteriores antes de reconectar
+        if (this.sock) {
+            try {
+                this.sock.ev.removeAllListeners('connection.update');
+                this.sock.ev.removeAllListeners('creds.update');
+                this.sock.ev.removeAllListeners('messages.upsert');
+                this.sock.end(undefined);
+            } catch {}
+            this.sock = null;
+        }
 
         try {
             const authDir = path.resolve('./auth_info');
@@ -153,15 +176,39 @@ export class BotManager extends EventEmitter {
                 fs.mkdirSync(authDir, { recursive: true });
             }
 
+            // Valida integridade do creds.json se existir
+            const credsPath = path.join(authDir, 'creds.json');
+            if (fs.existsSync(credsPath)) {
+                try {
+                    const content = fs.readFileSync(credsPath, 'utf8');
+                    JSON.parse(content);
+                } catch {
+                    this.addLog('warn', 'Arquivo creds.json corrompido. Reiniciando credenciais...');
+                    this.cleanAuthInfo();
+                }
+            }
+
             const { state, saveCreds } = await useMultiFileAuthState(authDir);
-            const { version } = await fetchLatestBaileysVersion();
+            let version = [2, 3000, 1015901307];
+            try {
+                const fetched = await fetchLatestBaileysVersion();
+                if (fetched && fetched.version) version = fetched.version;
+            } catch {
+                // fallback para versão segura
+            }
 
             this.sock = makeWASocket({
                 version,
                 auth: state,
                 logger: pino({ level: 'silent' }),
                 printQRInTerminal: false,
-                browser: ['Transcritor Web', 'Chrome', '2.0.0']
+                browser: Browsers.ubuntu('Chrome'), // Navegador oficial mais estável para Baileys
+                syncFullHistory: false, // Não baixa histórico antigo (evita timeout no celular)
+                markOnlineOnConnect: true,
+                connectTimeoutMs: 60000,
+                defaultQueryTimeoutMs: 60000,
+                keepAliveIntervalMs: 25000,
+                getMessage: async () => ({ conversation: '' })
             });
 
             this.sock.ev.on('creds.update', saveCreds);
@@ -181,8 +228,8 @@ export class BotManager extends EventEmitter {
                                 light: '#ffffff'
                             }
                         });
-                        this.setStatus('WAITING_QR', { qrCodeDataUrl: qrDataUrl });
-                        this.addLog('info', 'Novo QR Code gerado para conexão.');
+                        this.setStatus('WAITING_QR', { qrCodeDataUrl: qrDataUrl, pairingCode: null });
+                        this.addLog('info', 'QR Code pronto. Aponte a câmera do WhatsApp para conectar.');
                     } catch (e) {
                         this.addLog('error', `Falha ao gerar QR Code Data URL: ${e.message}`);
                     }
@@ -192,29 +239,47 @@ export class BotManager extends EventEmitter {
                     const statusCode = (lastDisconnect?.error instanceof Boom)
                         ? lastDisconnect.error.output?.statusCode
                         : null;
-                    const loggedOut = statusCode === DisconnectReason.loggedOut;
+                    const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+                    const isRestartRequired = statusCode === DisconnectReason.restartRequired; // 515
 
-                    this.addLog('warn', `Conexão encerrada. Código: ${statusCode || 'desconhecido'}.`);
+                    this.addLog('warn', `Conexão fechada. Motivo / Código: ${statusCode || 'desconhecido'}`);
 
                     if (this.intentionallyStopped) {
-                        this.setStatus('STOPPED', { qrCodeDataUrl: null, connectedUser: null });
+                        this.setStatus('STOPPED', { qrCodeDataUrl: null, pairingCode: null, connectedUser: null });
                         this.addLog('info', 'Bot foi desligado manualmente pelo usuário.');
                         return;
                     }
 
-                    if (loggedOut) {
-                        this.setStatus('STOPPED', { qrCodeDataUrl: null, connectedUser: null });
-                        this.addLog('error', 'Sessão desvinculada pelo WhatsApp. Conecte novamente pelo QR Code.');
+                    if (isLoggedOut) {
+                        this.setStatus('STOPPED', { qrCodeDataUrl: null, pairingCode: null, connectedUser: null });
+                        this.addLog('error', 'Sessão desvinculada. Limpando credenciais para novo pareamento.');
                         this.cleanAuthInfo();
-                    } else {
-                        // Reconexão automática em caso de queda de rede temporária
-                        this.setStatus('STARTING');
-                        this.addLog('info', 'Tentando reconectar em 3 segundos...');
-                        setTimeout(() => {
-                            if (!this.intentionallyStopped) this.start();
-                        }, 3000);
+                        return;
                     }
+
+                    // Se for código 515 (restartRequired), acontece logo após a leitura do QR Code!
+                    // Deve reconectar imediatamente para finalizar a sincronização das chaves.
+                    if (isRestartRequired) {
+                        this.addLog('info', '🔄 QR Code reconhecido! Finalizando pareamento com o WhatsApp...');
+                        this.setStatus('STARTING');
+                        setTimeout(() => {
+                            if (!this.intentionallyStopped) this._initSocket();
+                        }, 500);
+                        return;
+                    }
+
+                    // Para outras quedas temporárias de rede
+                    this.reconnectAttempts++;
+                    const delay = Math.min(2000 * this.reconnectAttempts, 10000);
+                    this.setStatus('STARTING');
+                    this.addLog('info', `Reconectando ao WhatsApp em ${delay / 1000}s...`);
+
+                    setTimeout(() => {
+                        if (!this.intentionallyStopped) this._initSocket();
+                    }, delay);
+
                 } else if (connection === 'open') {
+                    this.reconnectAttempts = 0;
                     const user = this.sock.user || {};
                     const phone = user.id ? user.id.split(':')[0] : '';
                     const connectedUser = {
@@ -223,9 +288,9 @@ export class BotManager extends EventEmitter {
                         phone: phone
                     };
 
-                    this.setStatus('CONNECTED', { qrCodeDataUrl: null, connectedUser });
+                    this.setStatus('CONNECTED', { qrCodeDataUrl: null, pairingCode: null, connectedUser });
                     this.stats.startedAt = new Date().toISOString();
-                    this.addLog('info', `WhatsApp Conectado com sucesso! Usuário: ${connectedUser.name} (+${connectedUser.phone})`);
+                    this.addLog('info', `✅ WhatsApp Conectado com sucesso! Aparelho: ${connectedUser.name} (+${connectedUser.phone})`);
                 }
             });
 
@@ -240,6 +305,30 @@ export class BotManager extends EventEmitter {
         } catch (error) {
             this.setStatus('ERROR');
             this.addLog('error', `Erro ao inicializar WhatsApp: ${error.message}`);
+        }
+    }
+
+    async requestPairingCode(phoneNumber) {
+        if (!this.sock) {
+            await this.start();
+        }
+
+        const cleanPhone = (phoneNumber || '').replace(/\D/g, '');
+        if (!cleanPhone || cleanPhone.length < 10) {
+            throw new Error('Informe o número com DDI e DDD (ex: 5511999998888).');
+        }
+
+        try {
+            this.addLog('info', `Solicitando código de pareamento para +${cleanPhone}...`);
+            const code = await this.sock.requestPairingCode(cleanPhone);
+            const formatted = code?.match(/.{1,4}/g)?.join('-') || code;
+            this.pairingCode = formatted;
+            this.setStatus('WAITING_QR', { pairingCode: formatted });
+            this.addLog('info', `Código de pareamento gerado: ${formatted}`);
+            return formatted;
+        } catch (err) {
+            this.addLog('error', `Falha ao gerar código de pareamento: ${err.message}`);
+            throw err;
         }
     }
 
@@ -411,6 +500,7 @@ export class BotManager extends EventEmitter {
         if (this.sock) {
             try {
                 this.sock.ev.removeAllListeners('connection.update');
+                this.sock.ev.removeAllListeners('creds.update');
                 this.sock.ev.removeAllListeners('messages.upsert');
                 this.sock.end(undefined);
             } catch (err) {
@@ -419,7 +509,7 @@ export class BotManager extends EventEmitter {
             this.sock = null;
         }
 
-        this.setStatus('STOPPED', { qrCodeDataUrl: null });
+        this.setStatus('STOPPED', { qrCodeDataUrl: null, pairingCode: null });
         this.addLog('info', 'Transcritor desligado.');
     }
 
@@ -428,7 +518,7 @@ export class BotManager extends EventEmitter {
         await this.stop();
         this.cleanAuthInfo();
         this.connectedUser = null;
-        this.setStatus('STOPPED', { qrCodeDataUrl: null, connectedUser: null });
+        this.setStatus('STOPPED', { qrCodeDataUrl: null, pairingCode: null, connectedUser: null });
         this.addLog('info', 'Sessão desvinculada com sucesso. Pronto para ler um novo QR Code.');
     }
 

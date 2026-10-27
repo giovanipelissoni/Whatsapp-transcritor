@@ -87,6 +87,16 @@ app.post('/api/bot/start', async (req, res) => {
     }
 });
 
+app.post('/api/bot/pairing-code', async (req, res) => {
+    const { phoneNumber } = req.body;
+    try {
+        const code = await bot.requestPairingCode(phoneNumber);
+        res.json({ success: true, code, status: bot.getStatus() });
+    } catch (err) {
+        res.status(400).json({ success: false, error: err.message });
+    }
+});
+
 app.post('/api/bot/stop', async (req, res) => {
     try {
         await bot.stop();

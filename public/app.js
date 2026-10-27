@@ -39,6 +39,17 @@ const logsBody = document.getElementById('logsBody');
 const logsContainer = document.getElementById('logsContainer');
 const toastContainer = document.getElementById('toastContainer');
 
+// Elementos de Método de Conexão (QR vs Código)
+const tabQrMethod = document.getElementById('tabQrMethod');
+const tabPairingMethod = document.getElementById('tabPairingMethod');
+const qrMethodSection = document.getElementById('qrMethodSection');
+const pairingMethodSection = document.getElementById('pairingMethodSection');
+const pairingPhoneInput = document.getElementById('pairingPhoneInput');
+const btnRequestPairingCode = document.getElementById('btnRequestPairingCode');
+const pairingCodeDisplayBox = document.getElementById('pairingCodeDisplayBox');
+const pairingCodeValue = document.getElementById('pairingCodeValue');
+const btnCopyPairingCode = document.getElementById('btnCopyPairingCode');
+
 // Inicialização da conexão SSE
 function setupEventSource() {
     if (eventSource) {
@@ -156,6 +167,11 @@ function updateStatusUI(data) {
             qrImage.classList.remove('hidden');
         }
 
+        if (data.pairingCode) {
+            pairingCodeValue.textContent = data.pairingCode;
+            pairingCodeDisplayBox.classList.remove('hidden');
+        }
+
     } else if (currentStatus === 'STARTING') {
         connectionPill.classList.add('status-starting');
         connectionPillText.textContent = 'Iniciando...';
@@ -227,6 +243,64 @@ btnLogout.addEventListener('click', async () => {
         showToast('Erro ao desconectar: ' + err.message, 'error');
     }
 });
+
+// Alternar Abas de Conexão (QR Code vs Código de 8 Dígitos)
+if (tabQrMethod && tabPairingMethod) {
+    tabQrMethod.addEventListener('click', () => {
+        tabQrMethod.classList.add('active');
+        tabPairingMethod.classList.remove('active');
+        qrMethodSection.classList.remove('hidden');
+        pairingMethodSection.classList.add('hidden');
+    });
+
+    tabPairingMethod.addEventListener('click', () => {
+        tabPairingMethod.classList.add('active');
+        tabQrMethod.classList.remove('active');
+        pairingMethodSection.classList.remove('hidden');
+        qrMethodSection.classList.add('hidden');
+    });
+}
+
+if (btnRequestPairingCode) {
+    btnRequestPairingCode.addEventListener('click', async () => {
+        const phone = pairingPhoneInput.value.trim();
+        if (!phone) {
+            showToast('Informe o número com DDI e DDD.', 'error');
+            return;
+        }
+
+        btnRequestPairingCode.disabled = true;
+        btnRequestPairingCode.textContent = 'Gerando...';
+
+        try {
+            const res = await fetch('/api/bot/pairing-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber: phone })
+            });
+            const data = await res.json();
+            if (data.success && data.code) {
+                pairingCodeValue.textContent = data.code;
+                pairingCodeDisplayBox.classList.remove('hidden');
+                showToast('Código gerado! Digite no WhatsApp.', 'info');
+            } else {
+                showToast(data.error || 'Erro ao gerar código.', 'error');
+            }
+        } catch (e) {
+            showToast('Falha na requisição: ' + e.message, 'error');
+        } finally {
+            btnRequestPairingCode.disabled = false;
+            btnRequestPairingCode.textContent = 'Gerar Código';
+        }
+    });
+}
+
+if (btnCopyPairingCode) {
+    btnCopyPairingCode.addEventListener('click', () => {
+        const code = pairingCodeValue.textContent.replace('-', '').trim();
+        copyText(code);
+    });
+}
 
 // Atualização de Configurações
 async function saveConfig() {
