@@ -888,11 +888,15 @@ function renderWhitelist(whitelist) {
     whitelist.forEach(item => {
         const row = document.createElement('div');
         row.className = 'whitelist-item-row';
+        const lidBadge = item.lid
+            ? `<span class="whitelist-item-phone" title="WhatsApp LID mapeado: ${item.lid}">LID OK ✅</span>`
+            : '';
         row.innerHTML = `
             <div class="whitelist-item-info">
                 <span>👤</span>
                 <span class="whitelist-item-name">${escapeHtml(item.name || 'Autorizado')}</span>
                 <span class="whitelist-item-phone">${escapeHtml(formatPhone(item.phone))}</span>
+                ${lidBadge}
             </div>
             <button class="whitelist-item-del" onclick="removeWhitelistNumber('${item.phone}')" title="Revogar acesso aos comandos">🗑️</button>
         `;
