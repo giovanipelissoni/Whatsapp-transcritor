@@ -16,6 +16,9 @@ Ferramenta local com **Dashboard Web** interativo para transcrever áudios do Wh
     * Configurar comportamento em grupos (Sob comando `/transcrever`, Sempre ativo, ou Desativado).
     * Botão para pausar temporariamente as transcrições sem desconectar o WhatsApp.
     * Botão para desconectar sessão e trocar de conta.
+  * **🛡️ Whitelist de Números Autorizados:**
+    * Cadastre números de familiares e pessoas de confiança (ex: Esposa) pelo Painel Web.
+    * Permite que contatos autorizados executem comandos (`/mercado`, `/comandos`, `/transcrever`) na conversa privada com você.
   * **Console de Logs:** Visualize os eventos e mensagens internas do sistema.
 
 ---

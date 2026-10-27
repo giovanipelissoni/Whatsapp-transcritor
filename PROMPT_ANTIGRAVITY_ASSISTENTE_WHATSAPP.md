@@ -36,8 +36,9 @@ O **WhatsApp Transcritor & Assistente** é uma ferramenta pessoal desenvolvida e
      - `/mercado adicionar sugestão`: Adiciona automaticamente à sua lista os itens sugeridos pela IA.
      - `/comandos`: Exibe todos os comandos disponíveis no WhatsApp.
 
-3. **🛡️ Segurança do Proprietário:**
-   - Todos os comandos do bot (`/mercado`, `/comandos`, `/transcrever`) são restritos e só executam quando enviados por **você mesmo** (`fromMe === true`), impedindo que terceiros em grupos ou chats manipulem sua lista ou usem comandos sem autorização.
+3. **🛡️ Segurança do Proprietário & Whitelist de Comandos:**
+   - Por padrão, todos os comandos do bot (`/mercado`, `/comandos`, `/transcrever`) são restritos e só executam quando enviados por **você mesmo** (`fromMe === true`), impedindo que terceiros em grupos manipulem sua lista.
+   - **Whitelist de Confiança no Dashboard:** Você pode cadastrar números específicos (ex: Esposa, familiares) pelo painel web para que eles também possam consultar e usar a lista de mercado (`/mercado`) ou comandos na conversa privada com você.
 
 4. **🌐 Painel Web Interativo (`http://localhost:3000`):**
    - Conexão via **QR Code** ou via **Código de Pareamento de 8 dígitos** por número de telefone.
