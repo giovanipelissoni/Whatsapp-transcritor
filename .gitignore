@@ -13,6 +13,7 @@ auth_info/
 .wwebjs_cache/
 tokens/
 creds.json
+processed_ids.json
 *session*
 
 # Arquivos de mídia temporários e downloads

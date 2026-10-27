@@ -26,6 +26,16 @@ if (!apiKey || apiKey === 'SUA_CHAVE_GROQ_AQUI') {
 
 const groq = new Groq({ apiKey });
 
+const processedIds = new Set();
+
+function getMessageTimestampSeconds(rawMsg) {
+    if (!rawMsg || !rawMsg.messageTimestamp) return Math.floor(Date.now() / 1000);
+    if (typeof rawMsg.messageTimestamp === 'object' && typeof rawMsg.messageTimestamp.toNumber === 'function') {
+        return rawMsg.messageTimestamp.toNumber();
+    }
+    return Number(rawMsg.messageTimestamp) || Math.floor(Date.now() / 1000);
+}
+
 /**
  * Função para desempacotar mensagens especiais do WhatsApp (viewOnce, ephemeral, etc.)
  */
@@ -152,6 +162,9 @@ async function startBot() {
             // Ignora transmissões de status
             if (remoteJid === 'status@broadcast') continue;
 
+            const msgId = rawMsg.key.id;
+            if (!msgId) continue;
+
             const isGroup = remoteJid.endsWith('@g.us');
             const fromMe = rawMsg.key.fromMe;
             const message = getNormalizedMessage(rawMsg.message);
@@ -168,6 +181,14 @@ async function startBot() {
             // REGRA 1: COMANDO /transcrever (Funciona em TODAS as conversas: Privado e Grupos)
             // =========================================================================
             if (isTranscribeCommand && quotedMessage?.audioMessage) {
+                if (processedIds.has(msgId)) continue;
+                const nowSec = Math.floor(Date.now() / 1000);
+                const cmdSec = getMessageTimestampSeconds(rawMsg);
+                if (nowSec - cmdSec > 180) continue;
+
+                processedIds.add(msgId);
+                if (contextInfo?.stanzaId) processedIds.add(contextInfo.stanzaId);
+
                 console.log(`🎙️ Comando /transcrever detectado em ${remoteJid} (${isGroup ? 'Grupo' : 'Privado'})`);
 
                 try {
@@ -205,9 +226,19 @@ async function startBot() {
             }
 
             // =========================================================================
-            // REGRA 2: PRIVADO - Transcrição automática de áudios (recebidos e enviados)
+            // REGRA 2: PRIVADO - Transcrição automática de áudios (apenas áudios novos)
             // =========================================================================
             if (!isGroup && audioMsg) {
+                if (processedIds.has(msgId)) continue;
+
+                // Ignora mensagens antigas sincronizadas pós-reconexão (> 180 segundos)
+                const nowSec = Math.floor(Date.now() / 1000);
+                const msgSec = getMessageTimestampSeconds(rawMsg);
+                if (nowSec - msgSec > 180) {
+                    continue;
+                }
+
+                processedIds.add(msgId);
                 console.log(`🎙️ [Privado] Áudio detectado em ${remoteJid} (Enviado por mim: ${fromMe})`);
                 
                 try {
@@ -218,6 +249,21 @@ async function startBot() {
                     const texto = await transcreverAudio(buffer);
 
                     if (texto && texto.length > 0) {
+                        await sock.sendMessage(remoteJid, {
+                            text: `🎙️ *Transcrição:*\n\n${texto}`
+                        }, { quoted: rawMsg });
+
+                        // Reage com check verde
+                        await sock.sendMessage(remoteJid, { react: { text: '✅', key: rawMsg.key } });
+                    } else {
+                        await sock.sendMessage(remoteJid, { react: { text: '❓', key: rawMsg.key } });
+                    }
+                } catch (err) {
+                    console.error('❌ Erro ao transcrever áudio privado:', err.message);
+                    await sock.sendMessage(remoteJid, { react: { text: '❌', key: rawMsg.key } });
+                }
+                continue;
+            }
                         await sock.sendMessage(remoteJid, {
                             text: `🎙️ *Transcrição:*\n\n${texto}`
                         }, { quoted: rawMsg });

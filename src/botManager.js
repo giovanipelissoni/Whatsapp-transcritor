@@ -41,6 +41,12 @@ export class BotManager extends EventEmitter {
 
         this.recentTranscriptions = [];
 
+        // Histórico de IDs processados para evitar re-transcrições pós-reconexão
+        this.processedFile = path.resolve('./processed_ids.json');
+        this.processedMessageIds = new Set();
+        this.saveTimer = null;
+        this.loadProcessedIds();
+
         // Inicializa Groq SDK
         const apiKey = process.env.GROQ_API_KEY;
         if (!apiKey || apiKey === 'SUA_CHAVE_GROQ_AQUI') {
@@ -96,6 +102,48 @@ export class BotManager extends EventEmitter {
         this.emit('status_change', this.getStatus());
         this.addLog('info', `Transcritor de áudio ${this.isTranscribingEnabled ? 'ATIVADO' : 'PAUSADO'}`);
         return this.isTranscribingEnabled;
+    }
+
+    loadProcessedIds() {
+        try {
+            if (fs.existsSync(this.processedFile)) {
+                const data = JSON.parse(fs.readFileSync(this.processedFile, 'utf8'));
+                if (Array.isArray(data)) {
+                    this.processedMessageIds = new Set(data.slice(-2000));
+                }
+            }
+        } catch {
+            this.processedMessageIds = new Set();
+        }
+    }
+
+    markMessageProcessed(id) {
+        if (!id) return;
+        this.processedMessageIds.add(id);
+        if (this.processedMessageIds.size > 2000) {
+            const first = this.processedMessageIds.values().next().value;
+            this.processedMessageIds.delete(first);
+        }
+        if (!this.saveTimer) {
+            this.saveTimer = setTimeout(() => {
+                this.saveTimer = null;
+                try {
+                    fs.writeFileSync(this.processedFile, JSON.stringify(Array.from(this.processedMessageIds)));
+                } catch {}
+            }, 1500);
+        }
+    }
+
+    isMessageProcessed(id) {
+        return Boolean(id && this.processedMessageIds.has(id));
+    }
+
+    getMessageTimestampSeconds(rawMsg) {
+        if (!rawMsg || !rawMsg.messageTimestamp) return Math.floor(Date.now() / 1000);
+        if (typeof rawMsg.messageTimestamp === 'object' && typeof rawMsg.messageTimestamp.toNumber === 'function') {
+            return rawMsg.messageTimestamp.toNumber();
+        }
+        return Number(rawMsg.messageTimestamp) || Math.floor(Date.now() / 1000);
     }
 
     getNormalizedMessage(message) {
@@ -345,6 +393,9 @@ export class BotManager extends EventEmitter {
         const remoteJid = rawMsg.key.remoteJid;
         if (!remoteJid || remoteJid === 'status@broadcast') return;
 
+        const msgId = rawMsg.key.id;
+        if (!msgId) return;
+
         const isGroup = remoteJid.endsWith('@g.us');
         const fromMe = Boolean(rawMsg.key.fromMe);
         const message = this.getNormalizedMessage(rawMsg.message);
@@ -366,9 +417,26 @@ export class BotManager extends EventEmitter {
         // REGRA 1: COMANDO /transcrever (TODAS as conversas: Privado e Grupos)
         // =========================================================================
         if (isTranscribeCommand && quotedMessage?.audioMessage) {
+            // Se o comando já foi executado, ignora
+            if (this.isMessageProcessed(msgId)) {
+                return;
+            }
+
+            // Ignora se o comando for uma mensagem antiga sincronizada após reconexão
+            const nowSec = Math.floor(Date.now() / 1000);
+            const cmdSec = this.getMessageTimestampSeconds(rawMsg);
+            if (nowSec - cmdSec > 180) {
+                return;
+            }
+
             // Se for grupo e estiver totalmente desativado para grupos, ignora
             if (isGroup && this.config.groupMode === 'disabled') {
                 return;
+            }
+
+            this.markMessageProcessed(msgId);
+            if (contextInfo?.stanzaId) {
+                this.markMessageProcessed(contextInfo.stanzaId);
             }
 
             const quotedMsgObj = {
@@ -398,39 +466,65 @@ export class BotManager extends EventEmitter {
         }
 
         // =========================================================================
-        // REGRA 2: PRIVADO (DMs) - Transcrição automática de áudios recebidos/enviados
+        // VALIDAÇÃO PARA TRANSCRIÇÃO AUTOMÁTICA (Áudios ao vivo)
         // =========================================================================
-        if (!isGroup && audioMsg && this.config.transcribePrivateAudio) {
-            if (fromMe && !this.config.transcribeMyOwnAudio) {
-                return; // Usuário desativou transcrição dos próprios áudios
+        if (audioMsg) {
+            // 1. Evita reprocessar áudios já transcritos
+            if (this.isMessageProcessed(msgId)) {
+                return;
             }
 
-            await this.processAudioMessage({
-                targetJid: remoteJid,
-                rawMsgToDownload: rawMsg,
-                quoteMsgToReply: rawMsg,
-                reactionKey: rawMsg.key,
-                fromMe,
-                isGroup: false,
-                sender: remoteJid.replace('@s.whatsapp.net', '')
-            });
-            return;
-        }
+            // 2. Filtro anti-histórico / pós-reconexão:
+            // Só transcreve áudios novos enviados nos últimos 180 segundos (3 minutos).
+            // Áudios mais antigos que isso são mensagens passadas sincronizadas pelo WhatsApp.
+            const nowSeconds = Math.floor(Date.now() / 1000);
+            const msgSeconds = this.getMessageTimestampSeconds(rawMsg);
+            const ageSeconds = nowSeconds - msgSeconds;
 
-        // =========================================================================
-        // REGRA 3: GRUPOS - Transcrever sempre (se configurado como 'always')
-        // =========================================================================
-        if (isGroup && this.config.groupMode === 'always' && audioMsg) {
-            await this.processAudioMessage({
-                targetJid: remoteJid,
-                rawMsgToDownload: rawMsg,
-                quoteMsgToReply: rawMsg,
-                reactionKey: rawMsg.key,
-                fromMe,
-                isGroup: true,
-                sender: rawMsg.key.participant || remoteJid
-            });
-            return;
+            if (ageSeconds > 180) {
+                // Áudio histórico sincronizado na reconexão -> Ignora silenciosamente
+                return;
+            }
+
+            // =====================================================================
+            // REGRA 2: PRIVADO (DMs) - Transcrição automática de áudios novos
+            // =====================================================================
+            if (!isGroup && this.config.transcribePrivateAudio) {
+                if (fromMe && !this.config.transcribeMyOwnAudio) {
+                    return; // Usuário desativou transcrição dos próprios áudios
+                }
+
+                this.markMessageProcessed(msgId);
+
+                await this.processAudioMessage({
+                    targetJid: remoteJid,
+                    rawMsgToDownload: rawMsg,
+                    quoteMsgToReply: rawMsg,
+                    reactionKey: rawMsg.key,
+                    fromMe,
+                    isGroup: false,
+                    sender: remoteJid.replace('@s.whatsapp.net', '')
+                });
+                return;
+            }
+
+            // =====================================================================
+            // REGRA 3: GRUPOS - Transcrever sempre (se configurado como 'always')
+            // =====================================================================
+            if (isGroup && this.config.groupMode === 'always') {
+                this.markMessageProcessed(msgId);
+
+                await this.processAudioMessage({
+                    targetJid: remoteJid,
+                    rawMsgToDownload: rawMsg,
+                    quoteMsgToReply: rawMsg,
+                    reactionKey: rawMsg.key,
+                    fromMe,
+                    isGroup: true,
+                    sender: rawMsg.key.participant || remoteJid
+                });
+                return;
+            }
         }
     }
 
