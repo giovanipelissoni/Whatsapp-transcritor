@@ -103,7 +103,6 @@ function setupEventSource() {
         const items = JSON.parse(e.data);
         renderMarketItems(items);
     });
-    });
 
     eventSource.addEventListener('log', (e) => {
         const log = JSON.parse(e.data);

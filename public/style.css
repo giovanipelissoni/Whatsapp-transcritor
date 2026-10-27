@@ -970,9 +970,11 @@ body {
     flex-direction: column;
     gap: 0.5rem;
     z-index: 1000;
+    pointer-events: none;
 }
 
 .toast {
+    pointer-events: auto;
     background: var(--bg-surface);
     color: var(--text-primary);
     border: 1px solid var(--border-strong);
