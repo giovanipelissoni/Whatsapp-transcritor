@@ -37,17 +37,19 @@ Ferramenta local com **Dashboard Web** interativo para transcrever áudios do Wh
 
 ---
 
-## 🛒 Lista de Mercado & Assistente de Compras
+## 🛒 Lista de Mercado por Categorias & Assistente de Compras
 
-Você pode gerenciar sua lista de compras tanto pelo WhatsApp quanto pelo Painel Web em tempo real!
+Você pode gerenciar sua lista de compras tanto pelo WhatsApp quanto pelo Painel Web em tempo real, agora organizada pelas seções do supermercado (Hortifrúti, Carnes & Açougue, Frios & Laticínios, Padaria, Mercearia, Bebidas, Limpeza, Higiene, Congelados, Pet Shop)!
 
 * **/comandos**: Exibe todos os comandos do assistente e suas descrições.
-* **/mercado**: Puxa e exibe a lista de compras atualizada.
-* **/mercado adicionar [produto]**: Adiciona um ou mais produtos (separe por vírgula).
+* **/mercado**: Exibe a lista completa de compras agrupada pelas seções do supermercado com barra de progresso.
+* **/mercado [seção]**: Filtra apenas os itens de uma seção específica (ex: `/mercado hortifruti`, `/mercado limpeza`).
+* **/mercado marcar [número ou nome]**: Marca ou desmarca o produto como comprado enquanto você faz compras no mercado.
+* **/mercado adicionar [produto]**: Adiciona produtos com categorização automática inteligente (ex: `/mercado adicionar Banana, Peito de frango, Sabão`).
 * **/mercado remover [número ou nome]**: Remove um produto específico da lista.
-* **/mercado limpar**: Limpa toda a lista de mercado.
 * **/mercado sugestão**: Sugere novos produtos usando IA com base na sua lista atual.
 * **/mercado adicionar sugestão**: Adiciona os itens sugeridos diretamente à lista de compras.
+* **/mercado limpar**: Limpa toda a lista de mercado.
 
 ---
 

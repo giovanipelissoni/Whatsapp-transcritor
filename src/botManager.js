@@ -434,18 +434,20 @@ export class BotManager extends EventEmitter {
             if (nowSec - this.getMessageTimestampSeconds(rawMsg) > 180) return;
             this.markMessageProcessed(msgId);
 
-            const helpText = `🤖 *Comandos do Assistente:*
+            const helpText = `🤖 *Comandos do Assistente Pessoal:*
 
 🎙️ *Áudio & Transcrição:*
-• */transcrever*: Responda citando qualquer áudio para transcrevê-lo sob demanda.
+• */transcrever*: Responda citando qualquer áudio recebido ou enviado para transcrevê-lo sob demanda.
 
-🛒 *Lista de Mercado:*
-• */mercado*: Puxa e exibe a lista de compras atual.
-• */mercado adicionar [item]*: Adiciona produtos (separe por vírgula para vários).
+🛒 *Lista de Mercado por Categorias:*
+• */mercado*: Exibe a lista completa organizada por seções (Hortifrúti, Carnes, Laticínios, Limpeza...).
+• */mercado [seção]*: Filtra apenas uma seção (ex: */mercado hortifruti*, */mercado limpeza*).
+• */mercado marcar [número]*: Marca ou desmarca um item como comprado no supermercado.
+• */mercado adicionar [item]*: Adiciona produtos com categorização automática inteligente.
 • */mercado remover [número ou nome]*: Remove um produto da lista.
-• */mercado limpar*: Limpa toda a lista de compras.
-• */mercado sugestão*: Sugere novos produtos usando IA com base na sua lista.
-• */mercado adicionar sugestão*: Adiciona as sugestões geradas à sua lista de compras.`;
+• */mercado sugestão*: A IA analisa sua lista e sugere itens complementares que possam faltar.
+• */mercado adicionar sugestão*: Adiciona os itens sugeridos pela IA à sua lista de compras.
+• */mercado limpar*: Esvazia toda a lista de compras.`;
 
             await this.sock.sendMessage(remoteJid, { text: helpText }, { quoted: rawMsg });
             return;
@@ -472,7 +474,7 @@ export class BotManager extends EventEmitter {
 
                 this.emit('market_updated', this.market.getItems());
                 await this.sock.sendMessage(remoteJid, {
-                    text: `✅ *${added.length} sugestões adicionadas à sua lista:*\n\n${added.map(i => `• ${i.name}`).join('\n')}\n\nEnvie */mercado* para ver a lista atualizada.`
+                    text: `✅ *${added.length} sugestões adicionadas à sua lista:*\n\n${added.map(i => `• ${i.name} _(${i.category})_`).join('\n')}\n\nEnvie */mercado* para ver a lista atualizada.`
                 }, { quoted: rawMsg });
                 return;
             }
@@ -482,7 +484,7 @@ export class BotManager extends EventEmitter {
                 const itemsText = textMsg.replace(/^\/mercado\s+adicionar\s*/i, '').trim();
                 if (!itemsText) {
                     await this.sock.sendMessage(remoteJid, {
-                        text: `💡 *Como adicionar:* Digite o produto após o comando.\nExemplo: */mercado adicionar Arroz, Café, Ovos*`
+                        text: `💡 *Como adicionar:* Digite o produto após o comando.\nExemplo: */mercado adicionar Arroz, Café, Ovos, Banana*`
                     }, { quoted: rawMsg });
                     return;
                 }
@@ -490,12 +492,39 @@ export class BotManager extends EventEmitter {
                 const added = this.market.addItem(itemsText);
                 this.emit('market_updated', this.market.getItems());
                 await this.sock.sendMessage(remoteJid, {
-                    text: `✅ *Produto${added.length > 1 ? 's' : ''} adicionado${added.length > 1 ? 's' : ''} à lista:*\n${added.map(i => `• ${i.name}`).join('\n')}\n\nEnvie */mercado* para visualizar a lista completa.`
+                    text: `✅ *Produto${added.length > 1 ? 's' : ''} adicionado${added.length > 1 ? 's' : ''} à lista:*\n${added.map(i => `• ${i.name} _(${i.category})_`).join('\n')}\n\nEnvie */mercado* para visualizar sua lista por categorias.`
                 }, { quoted: rawMsg });
                 return;
             }
 
-            // Subcomando 3: /mercado remover [item/número]
+            // Subcomando 3: /mercado marcar ou /mercado check [número ou nome]
+            if (lowerText.startsWith('/mercado marcar') || lowerText.startsWith('/mercado check')) {
+                const target = textMsg.replace(/^\/mercado\s+(marcar|check)\s*/i, '').trim();
+                if (!target) {
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `💡 *Como marcar:* Informe o número ou nome do item.\nExemplo: */mercado marcar 2* ou */mercado marcar Banana*`
+                    }, { quoted: rawMsg });
+                    return;
+                }
+
+                const toggled = this.market.toggleItem(target);
+                if (toggled) {
+                    this.emit('market_updated', this.market.getItems());
+                    const statusText = toggled.checked
+                        ? `✅ Item comprado: *~${toggled.name}~* _(${toggled.category})_`
+                        : `◻️ Item desmarcado: *${toggled.name}* _(${toggled.category})_`;
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `${statusText}\n\nEnvie */mercado* para conferir a lista atualizada.`
+                    }, { quoted: rawMsg });
+                } else {
+                    await this.sock.sendMessage(remoteJid, {
+                        text: `❌ Item "*${target}*" não encontrado na lista.\nEnvie */mercado* para ver os números dos itens.`
+                    }, { quoted: rawMsg });
+                }
+                return;
+            }
+
+            // Subcomando 4: /mercado remover [item/número]
             if (lowerText.startsWith('/mercado remover')) {
                 const target = textMsg.replace(/^\/mercado\s+remover\s*/i, '').trim();
                 if (!target) {
@@ -509,7 +538,7 @@ export class BotManager extends EventEmitter {
                 if (removed) {
                     this.emit('market_updated', this.market.getItems());
                     await this.sock.sendMessage(remoteJid, {
-                        text: `🗑️ Item removido da lista: *${removed.name}*`
+                        text: `🗑️ Item removido da lista: *${removed.name}* _(${removed.category})_`
                     }, { quoted: rawMsg });
                 } else {
                     await this.sock.sendMessage(remoteJid, {
@@ -519,7 +548,7 @@ export class BotManager extends EventEmitter {
                 return;
             }
 
-            // Subcomando 4: /mercado limpar
+            // Subcomando 5: /mercado limpar
             if (lowerText === '/mercado limpar') {
                 const count = this.market.clearList();
                 this.emit('market_updated', this.market.getItems());
@@ -529,7 +558,7 @@ export class BotManager extends EventEmitter {
                 return;
             }
 
-            // Subcomando 5: /mercado sugestao
+            // Subcomando 6: /mercado sugestao
             if (lowerText === '/mercado sugestao') {
                 try {
                     await this.sock.sendMessage(remoteJid, { react: { text: '✨', key: rawMsg.key } });
@@ -559,8 +588,9 @@ export class BotManager extends EventEmitter {
                 return;
             }
 
-            // Subcomando padrão: /mercado
-            const listMsg = this.market.formatWhatsAppList();
+            // Subcomando padrão: /mercado ou /mercado [categoria]
+            const categoryFilter = textMsg.replace(/^\/mercado\s*/i, '').trim();
+            const listMsg = this.market.formatWhatsAppList(categoryFilter || null);
             await this.sock.sendMessage(remoteJid, { text: listMsg }, { quoted: rawMsg });
             return;
         }

@@ -306,16 +306,35 @@
                     </div>
                 </div>
 
-                <!-- Add item input row -->
+                <!-- Add item input row with category selector -->
                 <div class="market-add-box">
                     <div class="market-input-group">
-                        <input type="text" id="marketInputItem" class="form-input market-input" placeholder="Digite o produto (ex: Leite, Café, Ovos, Detergente...)">
+                        <input type="text" id="marketInputItem" class="form-input market-input" placeholder="Digite o produto (ex: Leite, Café, Ovos, Banana...)">
+                        <select id="marketCategorySelect" class="form-select market-category-select" title="Selecione a categoria ou deixe em Automática">
+                            <option value="auto">⚡ Automática (IA / Dicionário)</option>
+                            <option value="Hortifrúti">🥬 Hortifrúti</option>
+                            <option value="Carnes & Açougue">🥩 Carnes & Açougue</option>
+                            <option value="Frios & Laticínios">🧀 Frios & Laticínios</option>
+                            <option value="Padaria & Sobremesas">🥖 Padaria & Sobremesas</option>
+                            <option value="Mercearia & Despensa">🌾 Mercearia & Despensa</option>
+                            <option value="Bebidas">🥤 Bebidas</option>
+                            <option value="Limpeza">🧼 Limpeza</option>
+                            <option value="Higiene & Cuidados">🧴 Higiene & Cuidados</option>
+                            <option value="Congelados">❄️ Congelados</option>
+                            <option value="Pet Shop">🐶 Pet Shop</option>
+                            <option value="Outros">📦 Outros</option>
+                        </select>
                         <button id="btnAddMarketItem" class="btn btn-primary">
                             <span>➕</span>
                             <span>Adicionar</span>
                         </button>
                     </div>
-                    <p class="market-input-hint">💡 Separe vários produtos por vírgula para adicionar todos de uma vez. Integrado em tempo real com o WhatsApp (<code>/mercado</code>)!</p>
+                    <p class="market-input-hint">💡 Separe vários produtos por vírgula para adicionar em lote. O sistema categoriza automaticamente pelas seções do supermercado!</p>
+                </div>
+
+                <!-- Category Filter Pills (Aisles of Supermarket) -->
+                <div id="marketCategoryFilters" class="category-filters-bar">
+                    <!-- Dynamic aisle pills will be inserted here -->
                 </div>
 
                 <!-- AI Suggestions Card (Collapsible/Conditional) -->
@@ -332,7 +351,7 @@
                     </div>
                 </div>
 
-                <!-- Checklist of items -->
+                <!-- Checklist of items grouped by category -->
                 <div id="marketListContainer" class="market-list-container">
                     <div id="emptyMarketState" class="empty-state">
                         <div class="empty-icon">🛒</div>
@@ -343,7 +362,7 @@
 
                 <!-- Footer with instructions -->
                 <div class="market-footer-info">
-                    <span>📱 <strong>Comandos no WhatsApp:</strong> <code>/mercado</code>, <code>/mercado adicionar [item]</code>, <code>/mercado remover [item]</code>, <code>/mercado sugestão</code>, <code>/mercado adicionar sugestão</code>, <code>/mercado limpar</code></span>
+                    <span>📱 <strong>Comandos no WhatsApp:</strong> <code>/mercado</code> • <code>/mercado marcar [número]</code> • <code>/mercado [seção]</code> • <code>/mercado adicionar [item]</code> • <code>/mercado remover [número]</code> • <code>/mercado sugestão</code> • <code>/mercado limpar</code></span>
                 </div>
             </div>
         </main>

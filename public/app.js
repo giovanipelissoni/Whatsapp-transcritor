@@ -62,12 +62,46 @@ const marketStatusStats = document.getElementById('marketStatusStats');
 const btnAiSuggest = document.getElementById('btnAiSuggest');
 const btnClearMarket = document.getElementById('btnClearMarket');
 const marketInputItem = document.getElementById('marketInputItem');
+const marketCategorySelect = document.getElementById('marketCategorySelect');
+const marketCategoryFilters = document.getElementById('marketCategoryFilters');
 const btnAddMarketItem = document.getElementById('btnAddMarketItem');
 const aiSuggestionsBox = document.getElementById('aiSuggestionsBox');
 const aiSuggestionsChips = document.getElementById('aiSuggestionsChips');
 const btnApplyAllSuggestions = document.getElementById('btnApplyAllSuggestions');
 const marketListContainer = document.getElementById('marketListContainer');
 const emptyMarketState = document.getElementById('emptyMarketState');
+
+// Estado de filtro de categorias
+let activeCategoryFilter = 'all';
+let cachedMarketItems = [];
+
+const CATEGORY_META = {
+    'Hortifrúti': { icon: '🥬', color: '#10B981', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)' },
+    'Carnes & Açougue': { icon: '🥩', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.3)' },
+    'Frios & Laticínios': { icon: '🧀', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.3)' },
+    'Padaria & Sobremesas': { icon: '🥖', color: '#D97706', bg: 'rgba(217, 119, 6, 0.15)', border: 'rgba(217, 119, 6, 0.3)' },
+    'Mercearia & Despensa': { icon: '🌾', color: '#8B5CF6', bg: 'rgba(139, 92, 246, 0.15)', border: 'rgba(139, 92, 246, 0.3)' },
+    'Bebidas': { icon: '🥤', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.3)' },
+    'Limpeza': { icon: '🧼', color: '#06B6D4', bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.3)' },
+    'Higiene & Cuidados': { icon: '🧴', color: '#EC4899', bg: 'rgba(236, 72, 153, 0.15)', border: 'rgba(236, 72, 153, 0.3)' },
+    'Congelados': { icon: '❄️', color: '#6366F1', bg: 'rgba(99, 102, 241, 0.15)', border: 'rgba(99, 102, 241, 0.3)' },
+    'Pet Shop': { icon: '🐶', color: '#14B8A6', bg: 'rgba(20, 184, 166, 0.15)', border: 'rgba(20, 184, 166, 0.3)' },
+    'Outros': { icon: '📦', color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.15)', border: 'rgba(156, 163, 175, 0.3)' }
+};
+
+const CATEGORY_ORDER = [
+    'Hortifrúti',
+    'Carnes & Açougue',
+    'Frios & Laticínios',
+    'Padaria & Sobremesas',
+    'Mercearia & Despensa',
+    'Bebidas',
+    'Limpeza',
+    'Higiene & Cuidados',
+    'Congelados',
+    'Pet Shop',
+    'Outros'
+];
 
 // Inicialização da conexão SSE
 function setupEventSource() {
@@ -506,10 +540,11 @@ if (navTabTranscriber && navTabMarket) {
 }
 
 // ==========================================
-// Lista de Mercado (Frontend)
+// Lista de Mercado (Frontend com Categorias)
 // ==========================================
 function renderMarketItems(items) {
     if (!Array.isArray(items)) return;
+    cachedMarketItems = items;
 
     const total = items.length;
     const pending = items.filter(i => !i.checked).length;
@@ -522,41 +557,149 @@ function renderMarketItems(items) {
         marketListContainer.innerHTML = '';
         marketListContainer.appendChild(emptyMarketState);
         emptyMarketState.classList.remove('hidden');
+        if (marketCategoryFilters) marketCategoryFilters.innerHTML = '';
         return;
     }
 
     emptyMarketState.classList.add('hidden');
     marketListContainer.innerHTML = '';
 
-    items.forEach((item, index) => {
-        const row = document.createElement('div');
-        row.className = 'market-item-row';
-        row.id = `mkt-${item.id}`;
-        row.innerHTML = `
-            <label class="market-item-left" title="Marcar como comprado">
-                <input type="checkbox" class="market-item-checkbox" ${item.checked ? 'checked' : ''} onchange="toggleMarketItem('${item.id}')">
-                <span class="market-item-name ${item.checked ? 'checked' : ''}"><strong>${index + 1}.</strong> ${escapeHtml(item.name)}</span>
-            </label>
-            <button class="market-item-del" onclick="deleteMarketItem('${item.id}')" title="Excluir produto">🗑️</button>
-        `;
-        marketListContainer.appendChild(row);
+    // 1. Agrupar itens por categoria mantendo ordenação de supermercado
+    const groups = {};
+    for (const cat of CATEGORY_ORDER) {
+        groups[cat] = [];
+    }
+
+    // Ordenar itens por ordem de seções do mercado e ordem alfabética interna
+    const sortedItems = [...items].sort((a, b) => {
+        const catA = a.category || 'Outros';
+        const catB = b.category || 'Outros';
+        const idxA = CATEGORY_ORDER.indexOf(catA);
+        const idxB = CATEGORY_ORDER.indexOf(catB);
+        const orderA = idxA === -1 ? 999 : idxA;
+        const orderB = idxB === -1 ? 999 : idxB;
+        if (orderA !== orderB) return orderA - orderB;
+        return a.name.localeCompare(b.name, 'pt-BR');
     });
+
+    // Mapeia o número global (1-based) para coincidir perfeitamente com os comandos do WhatsApp
+    const itemNumberMap = new Map();
+    sortedItems.forEach((item, index) => {
+        itemNumberMap.set(item.id, index + 1);
+        const cat = item.category || 'Outros';
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(item);
+    });
+
+    // 2. Renderizar pílulas de filtro de categorias
+    renderCategoryFilters(groups, total);
+
+    // 3. Renderizar cada seção de categoria
+    for (const catName of CATEGORY_ORDER) {
+        const catItems = groups[catName] || [];
+        if (catItems.length === 0) continue;
+
+        // Se houver filtro ativo e não for 'all', pula as outras categorias
+        if (activeCategoryFilter !== 'all' && activeCategoryFilter !== catName) {
+            continue;
+        }
+
+        const meta = CATEGORY_META[catName] || { icon: '📦', color: '#9CA3AF', bg: 'rgba(156, 163, 175, 0.15)', border: 'rgba(156, 163, 175, 0.3)' };
+        const catTotal = catItems.length;
+        const catChecked = catItems.filter(i => i.checked).length;
+
+        const groupCard = document.createElement('div');
+        groupCard.className = 'market-category-group';
+
+        const header = document.createElement('div');
+        header.className = 'market-category-header';
+        header.innerHTML = `
+            <div class="market-category-title">
+                <span>${meta.icon}</span>
+                <span>${escapeHtml(catName)}</span>
+            </div>
+            <span class="market-category-count" style="color: ${meta.color}; border: 1px solid ${meta.border}">
+                ${catChecked}/${catTotal} comprado${catTotal === 1 ? '' : 's'}
+            </span>
+        `;
+        groupCard.appendChild(header);
+
+        // Itens da categoria
+        catItems.forEach((item) => {
+            const globalNum = itemNumberMap.get(item.id) || 1;
+            const row = document.createElement('div');
+            row.className = 'market-item-row';
+            row.id = `mkt-${item.id}`;
+            row.innerHTML = `
+                <label class="market-item-left" title="Marcar como comprado">
+                    <input type="checkbox" class="market-item-checkbox" ${item.checked ? 'checked' : ''} onchange="toggleMarketItem('${item.id}')">
+                    <span class="market-item-name ${item.checked ? 'checked' : ''}">
+                        <strong>${globalNum}.</strong> ${escapeHtml(item.name)}
+                    </span>
+                    <span class="market-item-cat-tag" style="background: ${meta.bg}; color: ${meta.color}; border-color: ${meta.border}">
+                        ${meta.icon} ${escapeHtml(catName)}
+                    </span>
+                </label>
+                <button class="market-item-del" onclick="deleteMarketItem('${item.id}')" title="Excluir produto">🗑️</button>
+            `;
+            groupCard.appendChild(row);
+        });
+
+        marketListContainer.appendChild(groupCard);
+    }
+}
+
+function renderCategoryFilters(groups, total) {
+    if (!marketCategoryFilters) return;
+    marketCategoryFilters.innerHTML = '';
+
+    // Pílula 'Todos'
+    const allBtn = document.createElement('button');
+    allBtn.className = `cat-filter-btn ${activeCategoryFilter === 'all' ? 'active' : ''}`;
+    allBtn.innerHTML = `<span>🛒 Todos</span> <span class="cat-filter-badge">${total}</span>`;
+    allBtn.onclick = () => {
+        activeCategoryFilter = 'all';
+        renderMarketItems(cachedMarketItems);
+    };
+    marketCategoryFilters.appendChild(allBtn);
+
+    // Pílulas das categorias presentes
+    for (const catName of CATEGORY_ORDER) {
+        const catItems = groups[catName] || [];
+        if (catItems.length === 0) continue;
+
+        const meta = CATEGORY_META[catName] || { icon: '📦' };
+        const btn = document.createElement('button');
+        btn.className = `cat-filter-btn ${activeCategoryFilter === catName ? 'active' : ''}`;
+        btn.innerHTML = `<span>${meta.icon} ${escapeHtml(catName)}</span> <span class="cat-filter-badge">${catItems.length}</span>`;
+        btn.onclick = () => {
+            activeCategoryFilter = activeCategoryFilter === catName ? 'all' : catName;
+            renderMarketItems(cachedMarketItems);
+        };
+        marketCategoryFilters.appendChild(btn);
+    }
 }
 
 async function addMarketItem() {
     const text = marketInputItem.value.trim();
     if (!text) return;
 
+    const selectedCategory = marketCategorySelect ? marketCategorySelect.value : 'auto';
+
     btnAddMarketItem.disabled = true;
     try {
         const res = await fetch('/api/market/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: text })
+            body: JSON.stringify({
+                name: text,
+                category: selectedCategory === 'auto' ? null : selectedCategory
+            })
         });
         const data = await res.json();
         if (data.success) {
             marketInputItem.value = '';
+            if (marketCategorySelect) marketCategorySelect.value = 'auto';
             showToast('Produto(s) adicionado(s) com sucesso!', 'info');
         } else {
             showToast('Erro ao adicionar produto: ' + data.error, 'error');

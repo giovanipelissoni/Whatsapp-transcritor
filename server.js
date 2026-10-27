@@ -155,13 +155,16 @@ app.get('/api/logs', (req, res) => {
 app.get('/api/market', (req, res) => {
     res.json({
         items: bot.market.getItems(),
+        orderedItems: bot.market.getOrderedItems(),
+        groups: bot.market.getItemsGrouped(),
+        categories: bot.market.getCategories(),
         lastSuggestions: bot.market.lastSuggestions
     });
 });
 
 app.post('/api/market/add', (req, res) => {
-    const { name } = req.body;
-    const added = bot.market.addItem(name);
+    const { name, category } = req.body;
+    const added = bot.market.addItem(name, category);
     bot.emit('market_updated', bot.market.getItems());
     res.json({ success: true, added, items: bot.market.getItems() });
 });
@@ -169,6 +172,13 @@ app.post('/api/market/add', (req, res) => {
 app.post('/api/market/toggle', (req, res) => {
     const { id } = req.body;
     const item = bot.market.toggleItem(id);
+    bot.emit('market_updated', bot.market.getItems());
+    res.json({ success: true, item, items: bot.market.getItems() });
+});
+
+app.post('/api/market/update-category', (req, res) => {
+    const { id, category } = req.body;
+    const item = bot.market.updateItemCategory(id, category);
     bot.emit('market_updated', bot.market.getItems());
     res.json({ success: true, item, items: bot.market.getItems() });
 });

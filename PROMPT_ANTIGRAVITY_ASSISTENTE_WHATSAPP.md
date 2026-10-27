@@ -26,8 +26,10 @@ O **WhatsApp Transcritor & Assistente** é uma ferramenta pessoal desenvolvida e
 2. **🛒 Lista de Mercado Inteligente & Dashboard:**
    - Painel Web em tempo real (`http://localhost:3000`) com aba exclusiva para lista de compras (adicionar, riscar item comprado, excluir, sugestões automáticas).
    - Comandos diretamente no WhatsApp:
-     - `/mercado`: Mostra a lista atual de compras.
-     - `/mercado adicionar <itens>`: Adiciona um ou mais itens (ex: `/mercado adicionar Leite, Ovos, Café`).
+     - `/mercado`: Mostra a lista completa de compras organizada por seções do mercado (Hortifrúti, Carnes, Frios, Limpeza...).
+     - `/mercado <seção>`: Filtra itens de uma seção específica (ex: `/mercado hortifruti`).
+     - `/mercado marcar <item ou número>`: Marca ou desmarca o item como comprado enquanto está no mercado.
+     - `/mercado adicionar <itens>`: Adiciona um ou mais itens com categorização automática inteligente (ex: `/mercado adicionar Leite, Ovos, Café`).
      - `/mercado remover <item ou número>`: Remove um item da lista (ex: `/mercado remover 2` ou `/mercado remover Leite`).
      - `/mercado limpar`: Esvazia a lista de compras.
      - `/mercado sugestão`: A IA analisa seus itens atuais e sugere produtos complementares que possam estar faltando.
