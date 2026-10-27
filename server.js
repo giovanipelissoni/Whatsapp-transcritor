@@ -4,6 +4,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { BotManager } from './src/botManager.js';
 
+// Previne encerramento do processo por timeouts assíncronos ou desconexões de socket do Baileys
+process.on('unhandledRejection', (reason, promise) => {
+    console.warn('[AVISO] Rejeição assíncrona interceptada:', reason?.message || reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('[ERRO] Exceção não tratada capturada:', err?.message || err);
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
