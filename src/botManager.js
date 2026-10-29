@@ -525,6 +525,68 @@ export class BotManager extends EventEmitter {
         }
     }
 
+    async generateImage(prompt) {
+        const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+
+        // 1. Tenta usar o Google AI Studio (Imagen 3 / Nano Banana) se GEMINI_API_KEY estiver configurada
+        if (geminiKey && geminiKey !== 'SUA_CHAVE_GEMINI_AQUI') {
+            try {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`;
+                const payload = {
+                    instances: [{ prompt }],
+                    parameters: {
+                        sampleCount: 1,
+                        aspectRatio: '1:1',
+                        outputMimeType: 'image/jpeg'
+                    }
+                };
+
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.predictions && data.predictions[0]?.bytesBase64Encoded) {
+                        const buffer = Buffer.from(data.predictions[0].bytesBase64Encoded, 'base64');
+                        return {
+                            buffer,
+                            engine: 'Google Imagen 3 (Nano Banana)',
+                            note: ''
+                        };
+                    }
+                } else {
+                    const errorText = await res.text();
+                    this.addLog('warn', `Google Imagen 3 retornou status ${res.status}: ${errorText.substring(0, 120)}`);
+                }
+            } catch (err) {
+                this.addLog('warn', `Erro ao chamar Google Imagen 3: ${err.message}. Alternando para fallback...`);
+            }
+        }
+
+        // 2. Fallback de alta resolução caso a chave ainda não tenha sido configurada
+        const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true`;
+        const res = await fetch(pollinationsUrl);
+        if (!res.ok) {
+            throw new Error(`Falha no serviço de geração de imagem (HTTP ${res.status}).`);
+        }
+
+        const arrayBuf = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuf);
+        const engine = 'Nano Banana Flux';
+        const note = geminiKey
+            ? ''
+            : '💡 _Dica: Você também pode adicionar `GEMINI_API_KEY` no seu `.env` para usar o motor oficial Imagen 3 do Google AI Studio._';
+
+        return {
+            buffer,
+            engine,
+            note
+        };
+    }
+
     async start() {
         if (this.status === 'CONNECTED') {
             this.addLog('info', 'Bot já está conectado.');
@@ -781,6 +843,8 @@ export class BotManager extends EventEmitter {
         // Comandos enviados por terceiros não autorizados são ignorados
         // =========================================================================
         const isBotCommand = lowerText.startsWith('/mercado') ||
+                             lowerText.startsWith('/nanobanana') ||
+                             lowerText.startsWith('/imagem') ||
                              lowerText.startsWith('/comandos') ||
                              lowerText.startsWith('/ajuda') ||
                              lowerText.startsWith('/transcrever');
@@ -828,6 +892,9 @@ export class BotManager extends EventEmitter {
 
 🎙️ *Áudio & Transcrição:*
 • */transcrever*: Responda citando qualquer áudio recebido ou enviado para transcrevê-lo sob demanda.
+
+🎨 *Geração de Imagens por IA (Nano Banana):*
+• */nanobanana [descrição]* ou */imagem [descrição]*: Gera uma imagem em alta resolução a partir do seu prompt.
 
 🛒 *Lista de Mercado por Categorias:*
 • */mercado*: Exibe a lista completa organizada por seções (Hortifrúti, Carnes, Laticínios, Limpeza...).
@@ -991,6 +1058,75 @@ export class BotManager extends EventEmitter {
             const categoryFilter = textMsg.replace(/^\/mercado\s*/i, '').trim();
             const listMsg = this.market.formatWhatsAppList(categoryFilter || null);
             await this.sock.sendMessage(remoteJid, { text: listMsg }, { quoted: rawMsg });
+            return;
+        }
+
+        // =========================================================================
+        // COMANDOS: /nanobanana ou /imagem (Geração de Imagens por IA)
+        // =========================================================================
+        if (
+            lowerText === '/nanobanana' || lowerText.startsWith('/nanobanana ') ||
+            lowerText === '/imagem' || lowerText.startsWith('/imagem ')
+        ) {
+            if (this.isMessageProcessed(msgId)) return;
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (nowSec - this.getMessageTimestampSeconds(rawMsg) > 180) return;
+            this.markMessageProcessed(msgId);
+
+            let prompt = textMsg
+                .replace(/^\/(nanobanana|imagem)\s*/i, '')
+                .trim();
+
+            // Limpa termos introdutórios comuns em linguagem natural
+            prompt = prompt.replace(/^(gere|crie|faca|faça|desenhe)\s+(uma\s+)?(imagem|foto|desenho|ilustracao|ilustração)\s+(de\s+|do\s+|da\s+)?/i, '').trim();
+
+            if (!prompt) {
+                const helpImage = `🎨 *Como gerar imagens com IA (Nano Banana):*
+
+Envie o comando seguido da descrição do que você quer ver.
+
+*Exemplos de uso:*
+• */nanobanana um tubarão realista nadando no oceano azul*
+• */imagem um gato astronauta flutuando no espaço cyberpunk*
+• */nanobanana pôr do sol em uma praia tropical em aquarela*
+
+💡 _Dica: Quanto mais detalhes (cores, iluminação, ambiente, estilo), mais surpreendente será o resultado!_`;
+                await this.sock.sendMessage(remoteJid, { text: helpImage }, { quoted: rawMsg });
+                return;
+            }
+
+            try {
+                // Reação de processamento visual
+                try {
+                    await this.sock.sendMessage(remoteJid, { react: { text: '🎨', key: rawMsg.key } });
+                } catch {}
+
+                this.addLog('info', `🎨 Gerando imagem IA para ${senderDisplay}: "${prompt}"...`);
+
+                const { buffer, engine, note } = await this.generateImage(prompt);
+
+                const caption = `🎨 *Arte Gerada por IA*\n🏛️ *Motor:* _${engine}_\n📝 *Prompt:* _"${prompt}"_${note ? `\n\n${note}` : ''}`;
+
+                await this.sock.sendMessage(remoteJid, {
+                    image: buffer,
+                    caption
+                }, { quoted: rawMsg });
+
+                try {
+                    await this.sock.sendMessage(remoteJid, { react: { text: '✅', key: rawMsg.key } });
+                } catch {}
+
+                this.addLog('info', `✅ Imagem gerada com sucesso (${engine}) para: "${prompt}"`);
+            } catch (err) {
+                try {
+                    await this.sock.sendMessage(remoteJid, { react: { text: '❌', key: rawMsg.key } });
+                } catch {}
+
+                this.addLog('error', `❌ Falha ao gerar imagem: ${err.message}`);
+                await this.sock.sendMessage(remoteJid, {
+                    text: `❌ *Erro ao gerar imagem:*\n${err.message}\n\nTente novamente ou use uma descrição mais simples.`
+                }, { quoted: rawMsg });
+            }
             return;
         }
 

@@ -58,6 +58,16 @@ Você pode gerenciar sua lista de compras tanto pelo WhatsApp quanto pelo Painel
 
 ---
 
+## 🎨 Geração de Imagens por IA (Nano Banana)
+
+Gere imagens em alta definição diretamente no WhatsApp via comandos de texto:
+
+* **/nanobanana [descrição]**: Cria ilustrações e fotos realistas (ex: `/nanobanana um tubarão realista nadando no oceano azul`).
+* **/imagem [descrição]**: Sinônimo direto para geração rápida (ex: `/imagem um gato astronauta estilo cyberpunk`).
+* Suporte oficial ao modelo **Google Imagen 3 (Nano Banana)** com chave `GEMINI_API_KEY` do Google AI Studio.
+
+---
+
 ## 📋 Pré-requisitos
 
 1. **Chave de API Gratuita da Groq:**

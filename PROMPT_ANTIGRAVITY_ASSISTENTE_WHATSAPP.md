@@ -38,7 +38,11 @@ O **WhatsApp Transcritor & Assistente** é uma ferramenta pessoal desenvolvida e
      - `/mercado adicionar sugestão`: Adiciona automaticamente à sua lista os itens sugeridos pela IA.
      - `/comandos`: Exibe todos os comandos disponíveis no WhatsApp.
 
-3. **🛡️ Segurança do Proprietário & Whitelist de Comandos:**
+3. **🎨 Geração de Imagens por IA (Nano Banana / Imagen 3):**
+   - Comandos `/nanobanana <descrição>` ou `/imagem <descrição>`: Gera imagens em alta definição via IA a partir do texto e envia diretamente no chat.
+   - Suporte oficial à API do Google AI Studio (`GEMINI_API_KEY`).
+
+4. **🛡️ Segurança do Proprietário & Whitelist de Comandos:**
    - Por padrão, todos os comandos do bot (`/mercado`, `/comandos`, `/transcrever`) são restritos e só executam quando enviados por **você mesmo** (`fromMe === true`), impedindo que terceiros em grupos manipulem sua lista.
    - **Whitelist de Confiança no Dashboard:** Você pode cadastrar números específicos (ex: Esposa, familiares) pelo painel web para que eles também possam consultar e usar a lista de mercado (`/mercado`) ou comandos na conversa privada com você.
 
