@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { BotManager } from './src/botManager.js';
@@ -282,6 +283,15 @@ app.listen(PORT, () => {
     console.log(`🚀 Painel Web do WhatsApp Transcritor iniciado!`);
     console.log(`🌐 Acesse no seu navegador: http://localhost:${PORT}`);
     console.log(`======================================================\n`);
+
+    // Inicia o bot automaticamente se já houver sessão pareada
+    const credsPath = path.join(__dirname, 'auth_info', 'creds.json');
+    if (fs.existsSync(credsPath)) {
+        console.log('🔄 Sessão existente encontrada. Conectando ao WhatsApp automaticamente...');
+        bot.start().catch((err) => {
+            console.error('Falha na inicialização automática do bot:', err.message);
+        });
+    }
 });
 
 // Encerramento limpo em caso de CTRL+C

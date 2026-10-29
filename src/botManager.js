@@ -526,7 +526,19 @@ export class BotManager extends EventEmitter {
     }
 
     async generateImage(prompt) {
-        const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        let geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        if (!geminiKey || geminiKey === 'SUA_CHAVE_GEMINI_AQUI') {
+            try {
+                if (fs.existsSync(path.resolve('.env'))) {
+                    const envContent = fs.readFileSync(path.resolve('.env'), 'utf8');
+                    const match = envContent.match(/GEMINI_API_KEY=([^\r\n]+)/);
+                    if (match && match[1]?.trim() && match[1].trim() !== 'SUA_CHAVE_GEMINI_AQUI') {
+                        geminiKey = match[1].trim();
+                        process.env.GEMINI_API_KEY = geminiKey;
+                    }
+                }
+            } catch {}
+        }
 
         // 1. Tenta usar o Google AI Studio (Imagen 3 / Nano Banana) se GEMINI_API_KEY estiver configurada
         if (geminiKey && geminiKey !== 'SUA_CHAVE_GEMINI_AQUI') {
