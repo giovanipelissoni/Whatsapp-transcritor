@@ -569,7 +569,14 @@ export class BotManager extends EventEmitter {
         const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=flux&width=1024&height=1024&nologo=true&enhance=true`;
         const res = await fetch(pollinationsUrl);
         if (!res.ok) {
-            throw new Error(`Falha no serviço de geração de imagem (HTTP ${res.status}).`);
+            let errorMsg = `Falha no serviço de geração de imagem (HTTP ${res.status}).`;
+            try {
+                const errData = await res.json();
+                if (errData?.error?.code === 'FREE_LIMIT') {
+                    errorMsg = `Limite de tempo gratuito atingido (1 imagem a cada 45 segundos). Aguarde cerca de 30 segundos e tente novamente.`;
+                }
+            } catch {}
+            throw new Error(errorMsg);
         }
 
         const arrayBuf = await res.arrayBuffer();
