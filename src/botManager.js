@@ -842,6 +842,13 @@ export class BotManager extends EventEmitter {
         // ou por contatos autorizados na Whitelist do Dashboard (ex: Esposa)
         // Comandos enviados por terceiros não autorizados são ignorados
         // =========================================================================
+        const senderJid = isGroup ? (rawMsg.key?.participant || remoteJid) : remoteJid;
+        const senderPart = senderJid ? senderJid.split('@')[0].split(':')[0] : '';
+        const contextType = isGroup ? '[Grupo]' : '[Privado]';
+        const senderDisplay = fromMe
+            ? `Você (${this.connectedUser?.name || 'Giovani'})`
+            : (rawMsg.pushName ? `${rawMsg.pushName} [${senderPart}]` : senderPart);
+
         const isBotCommand = lowerText.startsWith('/mercado') ||
                              lowerText.startsWith('/nanobanana') ||
                              lowerText.startsWith('/imagem') ||
@@ -851,12 +858,12 @@ export class BotManager extends EventEmitter {
 
         if (isBotCommand) {
             const isAuthorized = fromMe || this.isSenderAuthorized(rawMsg);
-            const senderJid = isGroup ? (rawMsg.key?.participant || remoteJid) : remoteJid;
-            const senderPart = senderJid ? senderJid.split('@')[0].split(':')[0] : '';
-            const contextType = isGroup ? '[Grupo]' : '[Privado]';
-            const senderDisplay = fromMe
-                ? `Você (${this.connectedUser?.name || 'Giovani'})`
-                : (rawMsg.pushName ? `${rawMsg.pushName} [${senderPart}]` : senderPart);
+
+
+
+
+
+
 
             if (!isAuthorized) {
                 this.addLog('warn', `⛔ ${contextType} Comando "${textMsg}" de ${senderDisplay} BLOQUEADO: remetente não autorizado na whitelist.`);
