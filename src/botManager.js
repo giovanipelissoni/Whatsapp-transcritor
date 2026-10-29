@@ -525,61 +525,48 @@ export class BotManager extends EventEmitter {
         }
     }
 
-    async generateImage(prompt) {
-        let geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-        if (!geminiKey || geminiKey === 'SUA_CHAVE_GEMINI_AQUI') {
+    async expandPromptForImage(userPrompt) {
+        if (this.groq) {
             try {
-                if (fs.existsSync(path.resolve('.env'))) {
-                    const envContent = fs.readFileSync(path.resolve('.env'), 'utf8');
-                    const match = envContent.match(/GEMINI_API_KEY=([^\r\n]+)/);
-                    if (match && match[1]?.trim() && match[1].trim() !== 'SUA_CHAVE_GEMINI_AQUI') {
-                        geminiKey = match[1].trim();
-                        process.env.GEMINI_API_KEY = geminiKey;
-                    }
-                }
-            } catch {}
-        }
-
-        // 1. Tenta usar o Google AI Studio (Imagen 3 / Nano Banana) se GEMINI_API_KEY estiver configurada
-        if (geminiKey && geminiKey !== 'SUA_CHAVE_GEMINI_AQUI') {
-            try {
-                const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`;
-                const payload = {
-                    instances: [{ prompt }],
-                    parameters: {
-                        sampleCount: 1,
-                        aspectRatio: '1:1',
-                        outputMimeType: 'image/jpeg'
-                    }
-                };
-
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                const completion = await this.groq.chat.completions.create({
+                    model: 'qwen/qwen3.8-27b',
+                    messages: [
+                        {
+                            role: 'system',
+                            content: 'You are an expert AI prompt engineer specialized in text-to-image models (Flux, Midjourney). Convert the user prompt (usually in Portuguese or simple words) into an ultra-high quality, photographic, cinematic English prompt. Include subject details, camera angle, atmospheric lighting, depth of field, high resolution textures, and professional photo aesthetics. Output ONLY the English prompt as plain text without any preamble, quotes, markdown formatting, or explanations.'
+                        },
+                        {
+                            role: 'user',
+                            content: userPrompt
+                        }
+                    ],
+                    max_tokens: 220,
+                    temperature: 0.7
                 });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.predictions && data.predictions[0]?.bytesBase64Encoded) {
-                        const buffer = Buffer.from(data.predictions[0].bytesBase64Encoded, 'base64');
-                        return {
-                            buffer,
-                            engine: 'Google Imagen 3 (Nano Banana)',
-                            note: ''
-                        };
-                    }
-                } else {
-                    const errorText = await res.text();
-                    this.addLog('warn', `Google Imagen 3 retornou status ${res.status}: ${errorText.substring(0, 120)}`);
+                const expanded = completion.choices[0]?.message?.content?.trim();
+                if (expanded) {
+                    return expanded.replace(/\r?\n+/g, ' ').replace(/^["']|["']$/g, '').trim();
                 }
             } catch (err) {
-                this.addLog('warn', `Erro ao chamar Google Imagen 3: ${err.message}. Alternando para fallback...`);
+                this.addLog('warn', `Falha ao expandir prompt com Groq: ${err.message}`);
             }
         }
+        return userPrompt;
+    }
 
-        // 2. Fallback de alta resolução caso a chave ainda não tenha sido configurada
-        const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true`;
+    async generateImage(prompt) {
+        // 1. Usa a IA de texto do projeto para traduzir o pedido para o inglês e expandir para um prompt fotográfico rico
+        this.addLog('info', `✨ Expandindo e traduzindo prompt com IA: "${prompt}"...`);
+        let enhancedPrompt = prompt;
+        try {
+            enhancedPrompt = await this.expandPromptForImage(prompt);
+            this.addLog('info', `✨ Prompt melhorado: "${enhancedPrompt}"`);
+        } catch (err) {
+            this.addLog('warn', `Não foi possível expandir prompt: ${err.message}`);
+        }
+
+        // 2. Requisição com os parâmetros obrigatórios especificados
+        const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=flux&width=1024&height=1024&nologo=true&enhance=true`;
         const res = await fetch(pollinationsUrl);
         if (!res.ok) {
             throw new Error(`Falha no serviço de geração de imagem (HTTP ${res.status}).`);
@@ -588,14 +575,12 @@ export class BotManager extends EventEmitter {
         const arrayBuf = await res.arrayBuffer();
         const buffer = Buffer.from(arrayBuf);
         const engine = 'Nano Banana Flux';
-        const note = geminiKey
-            ? ''
-            : '💡 _Dica: Você também pode adicionar `GEMINI_API_KEY` no seu `.env` para usar o motor oficial Imagen 3 do Google AI Studio._';
 
         return {
             buffer,
             engine,
-            note
+            originalPrompt: prompt,
+            enhancedPrompt
         };
     }
 
@@ -1122,9 +1107,9 @@ Envie o comando seguido da descrição do que você quer ver.
 
                 this.addLog('info', `🎨 Gerando imagem IA para ${senderDisplay}: "${prompt}"...`);
 
-                const { buffer, engine, note } = await this.generateImage(prompt);
+                const { buffer, engine, originalPrompt, enhancedPrompt } = await this.generateImage(prompt);
 
-                const caption = `🎨 *Arte Gerada por IA*\n🏛️ *Motor:* _${engine}_\n📝 *Prompt:* _"${prompt}"_${note ? `\n\n${note}` : ''}`;
+                const caption = `🎨 *Arte Gerada por IA*\n🏛️ *Motor:* _${engine}_\n📝 *Pedido original:* _"${originalPrompt || prompt}"_\n✨ *Prompt melhorado:* _"${enhancedPrompt || prompt}"_`;
 
                 await this.sock.sendMessage(remoteJid, {
                     image: buffer,

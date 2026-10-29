@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-transcritor",
-  "version": "2.2.0",
+  "version": "1.0.22",
   "description": "Transcritor automático de áudios do WhatsApp usando Baileys, Groq Whisper e Dashboard Web",
   "type": "module",
   "main": "server.js",
