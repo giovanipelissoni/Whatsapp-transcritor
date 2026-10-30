@@ -14,6 +14,7 @@ import Groq, { toFile } from 'groq-sdk';
 import fs from 'fs';
 import path from 'path';
 import { MarketManager } from './marketManager.js';
+import { Client } from '@gradio/client';
 
 export class BotManager extends EventEmitter {
     constructor() {
@@ -528,17 +529,19 @@ export class BotManager extends EventEmitter {
     async expandPromptForImage(userPrompt) {
         if (this.groq) {
             try {
+                const systemPrompt = 'You are an expert photographic prompt engineer for camera-realistic text-to-image models (FLUX.1-dev).\n' +
+                    'Your job is to translate the user\'s description (usually in Portuguese) into an authentic, highly detailed English photographic prompt.\n' +
+                    'Strict requirements:\n' +
+                    '1. Emphasize authentic camera optics and real-world photographic style (e.g. RAW candid photograph, shot on Sony A7R IV, 85mm f/1.8 lens, natural lighting, sharp micro-textures, realistic fur/skin pores, subtle film grain, authentic colors, depth of field).\n' +
+                    '2. Describe composition, camera angle, realistic lighting, and tactile physical details.\n' +
+                    '3. STRICTLY FORBIDDEN WORDS: NEVER use plastic, generic, or AI-cliché terms like "8k", "3d render", "ultra-realistic", "masterpiece", "smooth", "trending on artstation", "unreal engine", "cgi", "digital illustration".\n' +
+                    '4. Output ONLY the English prompt as plain text without any introductory text, quotes, or explanations.';
+
                 const completion = await this.groq.chat.completions.create({
                     model: 'qwen/qwen3.8-27b',
                     messages: [
-                        {
-                            role: 'system',
-                            content: 'You are an expert AI prompt engineer specialized in text-to-image models (Flux, Midjourney). Convert the user prompt (usually in Portuguese or simple words) into an ultra-high quality, photographic, cinematic English prompt. Include subject details, camera angle, atmospheric lighting, depth of field, high resolution textures, and professional photo aesthetics. Output ONLY the English prompt as plain text without any preamble, quotes, markdown formatting, or explanations.'
-                        },
-                        {
-                            role: 'user',
-                            content: userPrompt
-                        }
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt }
                     ],
                     max_tokens: 220,
                     temperature: 0.7
@@ -554,41 +557,116 @@ export class BotManager extends EventEmitter {
         return userPrompt;
     }
 
+    async generateWithGradioSpace(prompt, timeoutMs = 45000) {
+        let token = process.env.HF_TOKEN;
+        if (!token) {
+            try {
+                if (fs.existsSync(path.resolve('.env'))) {
+                    const envContent = fs.readFileSync(path.resolve('.env'), 'utf8');
+                    const match = envContent.match(/HF_TOKEN=([^\r\n]+)/);
+                    if (match && match[1]?.trim()) {
+                        token = match[1].trim();
+                        process.env.HF_TOKEN = token;
+                    }
+                }
+            } catch {}
+        }
+
+        const spaceName = 'black-forest-labs/FLUX.1-schnell';
+        this.addLog('info', `🎨 Conectando ao Hugging Face Space ${spaceName}...`);
+
+        return new Promise(async (resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error(`Timeout de ${timeoutMs / 1000}s aguardando ZeroGPU do Hugging Face Space`));
+            }, timeoutMs);
+
+            try {
+                const client = await Client.connect(spaceName, {
+                    token,
+                    hf_token: token
+                });
+
+                this.addLog('info', `🎨 Executando inferência ZeroGPU no Space ${spaceName}...`);
+                const result = await client.predict('/infer', [
+                    prompt, // prompt
+                    0,      // seed
+                    true,   // randomize_seed
+                    1024,   // width
+                    1024,   // height
+                    4       // num_inference_steps
+                ]);
+
+                clearTimeout(timer);
+
+                const imageInfo = result?.data?.[0];
+                const imageUrl = imageInfo?.url;
+                if (!imageUrl) {
+                    throw new Error('Nenhuma URL de imagem retornada pelo Space');
+                }
+
+                const res = await fetch(imageUrl);
+                if (!res.ok) {
+                    throw new Error(`Falha ao baixar imagem gerada pelo Space (HTTP ${res.status})`);
+                }
+
+                const arrayBuf = await res.arrayBuffer();
+                resolve(Buffer.from(arrayBuf));
+            } catch (err) {
+                clearTimeout(timer);
+                reject(err);
+            }
+        });
+    }
+
     async generateImage(prompt) {
-        // 1. Usa a IA de texto do projeto para traduzir o pedido para o inglês e expandir para um prompt fotográfico rico
-        this.addLog('info', `✨ Expandindo e traduzindo prompt com IA: "${prompt}"...`);
+        // 1. Traduz e expande o prompt em estilo RAW fotográfico autêntico
+        this.addLog('info', `✨ Aprimorando prompt para estilo fotográfico RAW: "${prompt}"...`);
         let enhancedPrompt = prompt;
         try {
             enhancedPrompt = await this.expandPromptForImage(prompt);
-            this.addLog('info', `✨ Prompt melhorado: "${enhancedPrompt}"`);
+            this.addLog('info', `✨ Prompt fotográfico RAW: "${enhancedPrompt}"`);
         } catch (err) {
             this.addLog('warn', `Não foi possível expandir prompt: ${err.message}`);
         }
 
-        // 2. Requisição com os parâmetros obrigatórios especificados
-        const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=flux&width=1024&height=1024&nologo=true&enhance=true`;
-        const res = await fetch(pollinationsUrl);
-        if (!res.ok) {
-            let errorMsg = `Falha no serviço de geração de imagem (HTTP ${res.status}).`;
+        // 2. Tenta gerar via Hugging Face Space com cota ZeroGPU
+        try {
+            this.addLog('info', '🎨 Tentando gerar via Hugging Face Space (ZeroGPU)...');
+            const buffer = await this.generateWithGradioSpace(enhancedPrompt, 45000);
+            return {
+                buffer,
+                engine: 'Hugging Face Space FLUX.1',
+                originalPrompt: prompt,
+                enhancedPrompt
+            };
+        } catch (spaceErr) {
+            this.addLog('warn', `⚠️ Hugging Face Space falhou ou atingiu limite (${spaceErr.message}). Acionando Fallback Flux de Segurança...`);
+
+            // 3. Fallback de Segurança automático via Pollinations com modelo flux
             try {
-                const errData = await res.json();
-                if (errData?.error?.code === 'FREE_LIMIT') {
-                    errorMsg = `Limite de tempo gratuito atingido (1 imagem a cada 45 segundos). Aguarde cerca de 30 segundos e tente novamente.`;
+                const seed = Math.floor(Math.random() * 999999);
+                const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true`;
+                this.addLog('info', `🌐 Baixando imagem do Fallback Flux...`);
+
+                const res = await fetch(fallbackUrl);
+                if (!res.ok) {
+                    throw new Error(`Falha no Fallback Flux (HTTP ${res.status})`);
                 }
-            } catch {}
-            throw new Error(errorMsg);
+
+                const arrayBuf = await res.arrayBuffer();
+                const buffer = Buffer.from(arrayBuf);
+
+                return {
+                    buffer,
+                    engine: 'Fallback Flux',
+                    originalPrompt: prompt,
+                    enhancedPrompt
+                };
+            } catch (fallbackErr) {
+                this.addLog('error', `❌ Falha no Fallback Flux: ${fallbackErr.message}`);
+                throw new Error(`Falha ao gerar imagem:\n- Hugging Face Space: ${spaceErr.message}\n- Fallback Flux: ${fallbackErr.message}`);
+            }
         }
-
-        const arrayBuf = await res.arrayBuffer();
-        const buffer = Buffer.from(arrayBuf);
-        const engine = 'Nano Banana Flux';
-
-        return {
-            buffer,
-            engine,
-            originalPrompt: prompt,
-            enhancedPrompt
-        };
     }
 
     async start() {
@@ -1116,7 +1194,7 @@ Envie o comando seguido da descrição do que você quer ver.
 
                 const { buffer, engine, originalPrompt, enhancedPrompt } = await this.generateImage(prompt);
 
-                const caption = `🎨 *Arte Gerada por IA*\n🏛️ *Motor:* _${engine}_\n📝 *Pedido original:* _"${originalPrompt || prompt}"_\n✨ *Prompt melhorado:* _"${enhancedPrompt || prompt}"_`;
+                const caption = `🎨 *Arte Gerada por IA*\n🏛️ *Motor:* _${engine}_\n📝 *Pedido original:* _"${originalPrompt || prompt}"_\n✨ *Prompt traduzido:* _"${enhancedPrompt || prompt}"_`;
 
                 await this.sock.sendMessage(remoteJid, {
                     image: buffer,

@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-transcritor",
-  "version": "1.0.22",
+  "version": "1.0.24",
   "description": "Transcritor automático de áudios do WhatsApp usando Baileys, Groq Whisper e Dashboard Web",
   "type": "module",
   "main": "server.js",
@@ -9,7 +9,9 @@
     "cli": "node index.js"
   },
   "dependencies": {
+    "@gradio/client": "^2.7.2",
     "@hapi/boom": "^10.0.1",
+    "@huggingface/inference": "^4.13.32",
     "@whiskeysockets/baileys": "^6.7.13",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
